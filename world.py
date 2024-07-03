@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 
 # Step 1b: Patch reward model: exponential decay
 class Patch:
-    def __init__(self, initial_yield, decay_rate):
+    def __init__(self, initial_yield, decay_rate, decay_type='exponential'):
         self.initial_yield = initial_yield
         self.decay_rate = decay_rate
+        self.decay_type = decay_type
         self.time = 0
         self.harvesting = False
 
@@ -16,7 +17,12 @@ class Patch:
 
     def get_reward(self):
         if self.harvesting:
-            reward = self.initial_yield * np.exp(-self.decay_rate * self.time)
+            if self.decay_type == 'exponential':
+                reward = self.initial_yield * np.exp(-self.decay_rate * self.time)
+            elif self.decay_type == 'linear':
+                reward = max(0, self.initial_yield - self.decay_rate * self.time)
+            else:
+                raise ValueError("Invalid decay type. Use 'exponential' or 'linear'.")
             self.time += 1
             return reward
         else:
@@ -28,8 +34,6 @@ class Agent:
         self.beta = beta
         self.intercept = intercept
 
-    def choose_action(self, rewards):
-        rewards = np.array(rewards)
-        adjusted_rewards = rewards + self.intercept
-        stay_probability = np.exp(self.beta * adjusted_rewards[-1]) / np.sum(np.exp(self.beta * adjusted_rewards))
-        return np.random.choice([0, 1], p=[1-stay_probability, stay_probability])  # 0: stay, 1: leave
+    def choose_action(self, reward):
+        leave_proba = 1 / (1 + np.exp(self.intercept + self.beta * reward))
+        return np.random.choice([0, 1], p=[1-leave_proba, leave_proba])  # 0: stay, 1: leave
