@@ -34,6 +34,17 @@ class Agent:
         self.beta = beta
         self.intercept = intercept
 
+    def leave_proba(self, reward):
+        """ Compute the probability of leaving given the reward. """
+        return 1 / (1 + np.exp(self.intercept + self.beta * reward))
+
     def choose_action(self, reward):
         leave_proba = 1 / (1 + np.exp(self.intercept + self.beta * reward))
         return np.random.choice([0, 1], p=[1-leave_proba, leave_proba])  # 0: stay, 1: leave
+    
+    # Epsilon-greedy policy
+    def choose_action_epsilon(self, reward, epsilon):
+        if np.random.random() < epsilon:
+            return np.random.choice([0, 1])
+        else:
+            return self.choose_action(reward)

@@ -130,8 +130,8 @@ class MVTModel:
         # Plot the results for optimal leaving times in different environments.
         patch_types = ['Low', 'Med', 'High']
         fig, ax = plt.subplots(figsize=(6, 4))
-        ax.plot(patch_types, Tmax_rich[0] + 1, marker='o', label='Rich Environment')
-        ax.plot(patch_types, Tmax_poor[0] + 1, marker='o', label='Poor Environment')
+        ax.plot(patch_types, Tmax_rich + 1, marker='o', label='Rich Environment')
+        ax.plot(patch_types, Tmax_poor + 1, marker='o', label='Poor Environment')
         ax.set_xlabel('Patch Types')
         ax.set_ylabel('Optimal Leaving Time')
         ax.set_title(f'Optimal Leaving Times for Decay Type: {self.decay_type}')
