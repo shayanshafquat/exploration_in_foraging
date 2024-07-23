@@ -4,12 +4,13 @@ from mvt_brr import MVTModel
 from world import Patch, Agent
 
 class Simulation:
-    def __init__(self, decay_rate, beta_values, intercept_values, model, epsilon=None):
+    def __init__(self, decay_rate, model, beta_values=None, intercept_values=None, epsilon=None, omega_values=None):
         self.decay_rate = decay_rate
-        self.beta_values = beta_values
-        self.intercept_values = intercept_values
+        self.beta_values = beta_values if model != 'mellowmax' else None
+        self.intercept_values = intercept_values if model != 'mellowmax' else None
         self.model = model
         self.epsilon = epsilon if model == 'epsilon_greedy' else None
+        self.omega_values = omega_values if model == 'mellowmax' else None
         self.patch_types, self.rich_proportions, self.poor_proportions = self.initialize_env()
 
     def initialize_env(self):
@@ -31,8 +32,10 @@ class Simulation:
                 reward = patch.get_reward()
                 if self.model == 'epsilon_greedy':
                     action = agent.choose_action_epsilon(reward, self.epsilon)
+                elif self.model == 'mellowmax':
+                    action = agent.choose_action_mellowmax(reward)
                 else:
-                    action = agent.choose_action(reward)
+                    action = agent.choose_action_softmax(reward)
                 if action == 1:
                     leave_times.append(t)
                     break
@@ -47,9 +50,9 @@ class Simulation:
     def prepare_results(self):
         results = []
 
-        for beta in self.beta_values:
-            for intercept in self.intercept_values:
-                agent = Agent(beta=beta, intercept=intercept)
+        if self.model == 'mellowmax':
+            for omega in self.omega_values:
+                agent = Agent(omega=omega)
 
                 rich_stats = []
                 poor_stats = []
@@ -65,14 +68,76 @@ class Simulation:
                     poor_stats.append(stats)
 
                 results.append({
-                    'beta': beta,
-                    'intercept': intercept,
+                    'omega': omega,
                     'rich_stats': rich_stats,
                     'poor_stats': poor_stats
                 })
+
+        else:
+            for beta in self.beta_values:
+                for intercept in self.intercept_values:
+                    agent = Agent(beta=beta, intercept=intercept)
+
+                    rich_stats = []
+                    poor_stats = []
+
+                    for env, proportion in zip(self.patch_types, self.rich_proportions):
+                        leave_times = self.simulate(env, agent, n_runs=int(1000 * proportion))
+                        stats = self.compute_stats(leave_times)
+                        rich_stats.append(stats)
+
+                    for env, proportion in zip(self.patch_types, self.poor_proportions):
+                        leave_times = self.simulate(env, agent, n_runs=int(1000 * proportion))
+                        stats = self.compute_stats(leave_times)
+                        poor_stats.append(stats)
+
+                    results.append({
+                        'beta': beta,
+                        'intercept': intercept,
+                        'rich_stats': rich_stats,
+                        'poor_stats': poor_stats
+                    })
         return results
 
-    def plot_results(self, results, MVT_rich, MVT_poor):
+    def plot_results(self, results, MVT_rich, MVT_poor, save_plots=False):
+        if self.model == 'mellowmax':
+            self.plot_mellowmax_results(results, MVT_rich, MVT_poor, save_plots)
+        else:
+            self.plot_softmax_epsilon_results(results, MVT_rich, MVT_poor, save_plots)
+
+    def plot_mellowmax_results(self, results, MVT_rich, MVT_poor, save_plots):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        for result in results:
+            omega = result['omega']
+            rich_stats = result['rich_stats']
+            poor_stats = result['poor_stats']
+
+            patch_types = ['Low', 'Mid', 'High']
+            rich_means = [stat[0] for stat in rich_stats]
+            poor_means = [stat[0] for stat in poor_stats]
+            rich_errors = [np.sqrt(stat[1]) for stat in rich_stats]  # Standard deviation
+            poor_errors = [np.sqrt(stat[1]) for stat in poor_stats]  # Standard deviation
+
+            color = plt.cm.rainbow(omega / max(self.omega_values))
+            ax.errorbar(patch_types, rich_means, yerr=rich_errors, marker='o', linestyle='-', color=color, label=f'Rich, Omega: {omega}', capsize=5)
+            ax.errorbar(patch_types, poor_means, yerr=poor_errors, marker='o', linestyle='--', color=color, label=f'Poor, Omega: {omega}', capsize=5)
+        
+        ax.plot(patch_types, MVT_rich, marker='o', linestyle='-', color='black', label='Optimal Rich')
+        ax.plot(patch_types, MVT_poor, marker='o', linestyle='--', color='black', label='Optimal Poor')
+
+        ax.set_xlabel('Patch Types')
+        ax.set_ylabel('Mean Leave Time')
+        ax.set_title('Mellowmax Policy')
+        ax.legend()
+
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig('../plots/mellowmax_results.png')
+        else:
+            plt.show()
+
+    def plot_softmax_epsilon_results(self, results, MVT_rich, MVT_poor, save_plots):
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
         color_map = plt.cm.rainbow
@@ -132,22 +197,28 @@ class Simulation:
         ax.legend()
 
         plt.tight_layout()
-        plt.show()
+        if save_plots:
+            plt.savefig('../plots/softmax_epsilon_results.png')
+        else:
+            plt.show()
 
 def main():
     decay_rate = 0.075
+    # Model parameters
+    model = 'mellowmax'  # model choices are ['softmax', 'epsilon_greedy', 'mellowmax']
+    epsilon = 0.05  # Exploration parameter for epsilon-greedy
+    omega_values = [0.25, 0.5, 0.75]  # Exploitation parameter for mellowmax operator
+
+    # Only needed for softmax and epsilon_greedy models
     beta_values = [0.25, 0.5, 0.75]
     intercept_values = [-1, 0, 1]
-    epsilon = 0.05
-    # model = 'epsilon_greedy'
-    model = 'other'
 
     mvt_model = MVTModel(decay_type='exponential')
     MVT_rich, MVT_poor = mvt_model.run()
 
-    sim = Simulation(decay_rate, beta_values, intercept_values, model, epsilon)
+    sim = Simulation(decay_rate, model, beta_values=beta_values, intercept_values=intercept_values, epsilon=epsilon, omega_values=omega_values)
     results = sim.prepare_results()
-    sim.plot_results(results, MVT_rich, MVT_poor)
+    sim.plot_results(results, MVT_rich, MVT_poor, save_plots=True)
 
 if __name__ == "__main__":
     main()
