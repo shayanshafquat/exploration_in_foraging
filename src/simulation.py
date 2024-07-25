@@ -23,10 +23,10 @@ class Simulation:
         poor_proportions = [0.5, 0.3, 0.2]
         return patch_types, rich_proportions, poor_proportions
 
-    def simulate(self, environment, agent, n_runs=1000, n_max=1000):
+    def simulate(self, patch_id, agent, n_runs=1000, n_max=1000):
         leave_times = []
         for _ in range(n_runs):
-            patch = Patch(environment['initial_yield'], environment['decay_rate'])
+            patch = Patch(patch_id['initial_yield'], patch_id['decay_rate'])
             patch.start_harvesting()
             for t in range(1, n_max+1):
                 reward = patch.get_reward()
@@ -57,13 +57,13 @@ class Simulation:
                 rich_stats = []
                 poor_stats = []
 
-                for env, proportion in zip(self.patch_types, self.rich_proportions):
-                    leave_times = self.simulate(env, agent, n_runs=int(1000 * proportion))
+                for patch_id, proportion in zip(self.patch_types, self.rich_proportions):
+                    leave_times = self.simulate(patch_id, agent, n_runs=int(1000 * proportion))
                     stats = self.compute_stats(leave_times)
                     rich_stats.append(stats)
 
-                for env, proportion in zip(self.patch_types, self.poor_proportions):
-                    leave_times = self.simulate(env, agent, n_runs=int(1000 * proportion))
+                for patch_id, proportion in zip(self.patch_types, self.poor_proportions):
+                    leave_times = self.simulate(patch_id, agent, n_runs=int(1000 * proportion))
                     stats = self.compute_stats(leave_times)
                     poor_stats.append(stats)
 
