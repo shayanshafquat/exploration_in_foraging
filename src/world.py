@@ -43,6 +43,9 @@ class Agent:
 
     def choose_action_softmax(self, reward):
         leave_proba = self.leave_proba_softmax(reward)
+        # Check if leave_proba is a list of one element
+        if isinstance(leave_proba, np.ndarray) and len(leave_proba) == 1:
+            leave_proba = leave_proba[0]
         return np.random.choice([0, 1], p=[1-leave_proba, leave_proba])  # 0: stay, 1: leave
     
     # Epsilon-greedy policy
