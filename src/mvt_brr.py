@@ -27,13 +27,13 @@ class MVTModel:
     def calculate_rewards(self, A, a, T):
         # Calculate the reward, reward rate, and gain based on decay type.
         if self.decay_type == 'exponential':
-            Reward = A * np.exp(-a * T)
+            Reward = np.maximum(A * np.exp(-a * T), 0)
             RRE = -a * A * np.exp(-a * T)
             Gain = (A / a) * (1 - np.exp(-a * T))
         elif self.decay_type == 'linear':
             Reward = np.maximum(A - a * T, 0)
-            RRE = -a
-            Gain = A * T - 0.5 * a * T**2
+            RRE = -a if A - a * T > 0 else 0  # Adjusted to handle zero reward case
+            Gain = np.maximum(A * T - 0.5 * a * T**2, 0)  # Ensure Gain is non-negative
         else:
             raise ValueError("Invalid decay type. Use 'exponential' or 'linear'.")
         return Reward, RRE, Gain
