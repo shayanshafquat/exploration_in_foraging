@@ -15,11 +15,12 @@ class Patch:
 
     def start_harvesting(self):
         self.harvesting = True
+        self.time = 0
 
     def get_reward(self):
         if self.harvesting:
             if self.decay_type == 'exponential':
-                reward = self.initial_yield * np.exp(-self.decay_rate * self.time)
+                reward = max(0, self.initial_yield * np.exp(-self.decay_rate * self.time))
             elif self.decay_type == 'linear':
                 reward = max(0, self.initial_yield - self.decay_rate * self.time)
             else:

@@ -29,8 +29,16 @@ def error_calculation(patch_type_leave_times, patch_type_observed_leave):
     rmse_error = np.sqrt(np.sum(squared_errors))
     return rmse_error
 
-def simulation(params, patch_types, observed_leave, constant_intercept=None):
-    beta, intercept = params if constant_intercept is None else (params, constant_intercept)
+def simulation(params, patch_types, observed_leave, constant_intercept=None, constant_beta=None):
+    if constant_intercept is not None:
+        beta = params
+        intercept = constant_intercept
+    elif constant_beta is not None:
+        beta = constant_beta
+        intercept = params
+    else:
+        beta, intercept = params
+
     agent = Agent(beta=beta, intercept=intercept)
     sim = Simulation(decay_rate=0.075, model='softmax')
 
@@ -39,7 +47,7 @@ def simulation(params, patch_types, observed_leave, constant_intercept=None):
 
     for i, patch_type in enumerate(patch_types):
         patch_id = sim.patch_types[patch_type-1]
-        leave_times = sim.simulate(patch_id, agent, n_runs=5)
+        leave_times = sim.simulate(patch_id, agent, n_runs=3)
         patch_type_leave_times[patch_type].extend([np.mean(leave_times)])
         patch_type_observed_leave[patch_type].append(observed_leave[i])
 
@@ -64,9 +72,11 @@ def optimize_params(df_trials, constant_intercept=-3):
 
             initial_beta = 0.3
             initial_params = [0.3, -3]
+            initial_intercept = -3
 
             res_beta_vary = opt.minimize(simulation, initial_beta, method='nelder-mead', args=(patches, leave_times, constant_intercept), options={'xatol': 1e-6, 'disp': True})
             res_both_vary = opt.minimize(simulation, initial_params, method='nelder-mead', args=(patches, leave_times), options={'xatol': 1e-6, 'disp': True})
+            res_intercept_vary = opt.minimize(simulation, initial_intercept, method='nelder-mead', args=(patches, leave_times, None, initial_beta), options={'xatol': 1e-6, 'disp': True})
 
             results.append({
                 'environment': env,
@@ -76,7 +86,10 @@ def optimize_params(df_trials, constant_intercept=-3):
                 'rmse_beta': res_beta_vary.fun,
                 'beta_both_vary': res_both_vary.x[0],
                 'intercept_both_vary': res_both_vary.x[1],
-                'rmse_both': res_both_vary.fun
+                'rmse_both': res_both_vary.fun,
+                'beta_constant': initial_beta,
+                'intercept_vary': res_intercept_vary.x[0],
+                'rmse_intercept': res_intercept_vary.fun
             })
 
     results_df = pd.DataFrame(results)
