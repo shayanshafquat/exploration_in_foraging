@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import brentq
+from scipy.optimize import root, fsolve
 
 # Step 1: Define the Environment
 
@@ -32,26 +33,34 @@ class Patch:
 
 # Step 1c: Agent’s choice model: softmax with intercept
 class Agent:
-    def __init__(self, policy_type='softmax', beta=None, intercept=None, omega=None, epsilon=None, mellowmax_type='add'):
+    def __init__(self,
+                  policy_type='softmax',
+                  beta=None, intercept=None, 
+                  omega=None, 
+                  epsilon=None, 
+                  mellowmax_type='add',
+                  use_intercept=True):
+        
         self.policy_type = policy_type
         self.mellowmax_type = mellowmax_type
+        self.use_intercept = use_intercept
 
         if self.policy_type == 'softmax':
-            if beta is None or intercept is None:
-                raise ValueError("For softmax policy, both beta and intercept must be provided.")
+            if beta is None:
+                raise ValueError("For softmax policy, beta must be provided.")
             self.beta = beta
-            self.intercept = intercept
+            self.intercept = intercept if use_intercept else 0
         elif self.policy_type == 'mellowmax':
-            if omega is None or intercept is None:
-                raise ValueError("For mellowmax policy, both omega and intercept must be provided.")
+            if omega is None:
+                raise ValueError("For mellowmax policy, omega must be provided.")
             self.omega = omega
-            self.intercept = intercept
+            self.intercept = intercept if use_intercept else 0
         elif self.policy_type == 'epsilon-greedy':
-            if epsilon is None or beta is None or intercept is None:
-                raise ValueError("For epsilon-greedy policy, epsilon, beta, and intercept must be provided.")
+            if epsilon is None or beta is None:
+                raise ValueError("For epsilon-greedy policy, epsilon and beta must be provided.")
             self.epsilon = epsilon
             self.beta = beta
-            self.intercept = intercept
+            self.intercept = intercept if use_intercept else 0
         else:
             raise ValueError("Unsupported policy type: choose either 'softmax', 'mellowmax', or 'epsilon-greedy'.")
 
@@ -78,7 +87,7 @@ class Agent:
     def mellowmax_operator(self, Q_values):
         """ Calculate the mellowmax operator for given Q-values. """
         if self.mellowmax_type == 'add':
-            return np.log(np.mean(np.exp(self.omega * Q_values))) / self.omega + self.intercept
+            return np.log(np.mean(np.exp(self.omega * Q_values) + self.intercept)) / self.omega 
         elif self.mellowmax_type == 'denom':
             return np.log(np.mean(np.exp(self.omega * Q_values) / self.intercept)) / self.omega
         else:
@@ -91,8 +100,19 @@ class Agent:
             term2 = np.exp(beta_hat * (reward - mm_value)) * (reward - mm_value)
             return term1 + term2
 
-        beta_hat = brentq(root_function, -10, 10)
-        return beta_hat
+        # beta_hat = brentq(root_function, 0, 1)
+        initial_guess = 0  # Start at 0 or another reasonable guess
+        beta_hat = fsolve(root_function, initial_guess)
+        return beta_hat[0]
+
+        # # Use root to find the root of the function
+        # initial_guess = 0.3  # A reasonable initial guess, could also be adjusted based on context
+        # result = root(root_function, initial_guess)
+        # if result.success:
+        #     return result.x[0]  # root returns an array, so return the first element
+        # else:
+        #     raise ValueError("Root finding failed to converge")
+
 
     def leave_proba_mellowmax(self, reward):
         """ Compute the probability of leaving given the reward using mellowmax with intercept. """
