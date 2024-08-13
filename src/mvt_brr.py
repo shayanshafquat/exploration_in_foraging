@@ -122,10 +122,38 @@ class MVTModel:
         maxRR_rich, Tmax_rich, GainEmax_rich, RewardEmax_rich = self.compute_overall_rr(multiPatchRR_rich, rich_proportions, AllGainE, AllRewardE)
         multiPatchRR_poor, Tleave_poor, RRleave_poor = self.calculate_optimal_times(AllGainE)
         maxRR_poor, Tmax_poor, GainEmax_poor, RewardEmax_poor = self.compute_overall_rr(multiPatchRR_poor, poor_proportions, AllGainE, AllRewardE)
-
         # self.plot_results(Tmax_rich, Tmax_poor)
         return Tmax_rich, Tmax_poor
 
+    def get_average_reward_rate(self, proportions):
+        """
+        Calculate the average reward rate for a given environment defined by patch proportions.
+
+        Parameters:
+        - proportions: array-like, the proportions of each patch type in the environment.
+
+        Returns:
+        - average_reward_rate: float, the average reward rate for the environment.
+        """
+        # Calculate rewards and gains for all patch types
+        AllRewardE = np.zeros((self.reso, self.NrPatchTypes))
+        AllGainE = np.zeros((self.reso, self.NrPatchTypes))
+
+        for P in range(self.NrPatchTypes):
+            for T in range(1, self.reso + 1):
+                RewardE, _, GainE = self.calculate_rewards(self.A[P], self.a[P], T)
+                AllRewardE[T - 1, P] = RewardE
+                AllGainE[T - 1, P] = GainE
+
+        # Calculate optimal times and reward rates for the environment
+        multiPatchRR, _, _ = self.calculate_optimal_times(AllGainE)
+
+        # Compute overall reward rates for the given proportions
+        maxRR, _, _, _ = self.compute_overall_rr(multiPatchRR, proportions, AllGainE, AllRewardE)
+
+        # Return the average reward rate, which is maxRR in this context
+        return maxRR[0]
+    
     def plot_results(self, Tmax_rich, Tmax_poor):
         # Plot the results for optimal leaving times in different environments.
         patch_types = ['Low', 'Med', 'High']
