@@ -4,10 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, norm
 from sklearn.linear_model import LinearRegression
+from sklearn.mixture import GaussianMixture
+from collections import deque
 
 from utils import prepare_avg_rewards
-
-
 
 class Agent:
     def __init__(self, decay_rate_means, decay_rate_stds, observation_var=0.00001):
@@ -52,7 +52,7 @@ class Agent:
 
     def decide_leave(self, reward, average_reward):
         return reward < average_reward
-    
+
 class Patch:
     def __init__(self, initial_yield, decay_rate, decay_type='exponential'):
         self.initial_yield = initial_yield
@@ -68,9 +68,9 @@ class Patch:
     def get_reward(self):
         if self.harvesting:
             if self.decay_type == 'exponential':
-                reward = max(0, self.initial_yield * np.exp(-self.decay_rate * self.time))
+                reward = max(0.1, self.initial_yield * np.exp(-self.decay_rate * self.time))
             elif self.decay_type == 'linear':
-                reward = max(0, self.initial_yield - self.decay_rate * self.time)
+                reward = max(0.1, self.initial_yield - self.decay_rate * self.time)
             else:
                 raise ValueError("Invalid decay type. Use 'exponential' or 'linear'.")
             self.time += 1
@@ -157,192 +157,292 @@ class Simulation:
             df_trials['simulated_dmLeave'] = df_trials['simulated_leaveT'] - df_trials['meanLT']
             return df_trials
 
-# class Agent:
-#     def __init__(self, decay_rate_means, decay_rate_stds, observation_var=0.00001):
-#         self.decay_rate_means = decay_rate_means
-#         self.decay_rate_stds = decay_rate_stds
-#         self.observation_var = observation_var
-#         self.beliefs = {(i+1, env): {'mean': decay_rate_means[i], 'std': decay_rate_stds[i], 'count': 0}
-#                         for i in range(len(decay_rate_means)) for env in [1, 2]}
-#         self.mean_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
-#         self.std_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
-#         self.model_weights = {'exponential': 1/3, 'linear': 1/3, 'quadratic': 1/3}  # Initialize model weights
+class MultipleAgent:
+    def __init__(self, decay_rate_means, decay_rate_stds, method='bayesian', observation_var=0.00001, noise_std=0.01, learning_rate=0.1, ema_alpha=0.1, n_components=2):
+        self.decay_rate_means = decay_rate_means
+        self.decay_rate_stds = decay_rate_stds
+        self.observation_var = observation_var
+        self.noise_std = noise_std
+        self.learning_rate = learning_rate
+        self.ema_alpha = ema_alpha
+        self.n_components = n_components
+        self.method = method  # The method to be used for belief updates
 
-#     def sample_decay_rate(self, patch_type, env):
-#         belief = self.beliefs[(patch_type, env)]
-#         return np.random.normal(belief['mean'], belief['std'])
+        self.beliefs = {(i+1, env): {'mean': decay_rate_means[i], 'std': decay_rate_stds[i], 'count': 0}
+                        for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.mean_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.std_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.reward_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
 
-#     def update_belief(self, patch_type, env, observed_data):
-#         belief = self.beliefs[(patch_type, env)]
-#         prior_mean = belief['mean']
-#         prior_var = belief['std'] ** 2
-#         belief['count'] += 1
-#         count = belief['count']
+    def sample_decay_rate(self, patch_type, env):
+        belief = self.beliefs[(patch_type, env)]
+        return np.random.normal(belief['mean'], belief['std'])
 
-#         # Update model weights using Bayesian inference
-#         model_likelihoods = self.calculate_model_likelihoods(observed_data)
-#         self.update_model_weights(model_likelihoods)
+    def update_belief(self, patch_type, env, observed_decay_rate=None, observed_reward=None, expected_reward=None):
+        if self.method == 'bayesian':
+            self.update_belief_bayesian(patch_type, env, observed_decay_rate)
+        elif self.method == 'rescorla_wagner':
+            self.update_belief_rescorla_wagner(patch_type, env, observed_reward, expected_reward)
+        elif self.method == 'ema':
+            self.update_belief_ema(patch_type, env, observed_decay_rate)
+        elif self.method == 'gmm':
+            self.update_belief_gmm(patch_type, env)
+        elif self.method == 'fixed_noise':
+            self.get_reward_with_noise(patch_type, env, observed_decay_rate)
+        elif self.method == 'random_walk':
+            self.update_belief_random_walk(patch_type, env)
+        elif self.method == 'hierarchical':
+            self.update_belief_hierarchical(patch_type, env, observed_decay_rate)
+        elif self.method == 'no_mean_change':
+            self.update_belief_no_mean_change(patch_type, env, observed_decay_rate)
 
-#         # Calculate a weighted average of the decay rate based on model weights
-#         posterior_mean = 0
-#         for model, weight in self.model_weights.items():
-#             if model == 'exponential':
-#                 posterior_mean += weight * self.estimate_exponential_decay(observed_data)
-#             elif model == 'linear':
-#                 posterior_mean += weight * self.estimate_linear_decay(observed_data)
-#             elif model == 'quadratic':
-#                 posterior_mean += weight * self.estimate_quadratic_decay(observed_data)
+    # Original Bayesian Update Method
+    def update_belief_bayesian(self, patch_type, env, observed_decay_rate):
+        belief = self.beliefs[(patch_type, env)]
+        prior_mean = belief['mean']
+        prior_var = belief['std'] ** 2
+        belief['count'] += 1
+        count = belief['count']
 
-#         # Bayesian update for variance, if observation variance > 0
-#         if self.observation_var > 0:
-#             adjusted_observation_var = self.observation_var / count
-#             posterior_var = (prior_var * adjusted_observation_var) / (prior_var + adjusted_observation_var)
-#         else:
-#             posterior_var = prior_var * (count - 1) / count  # Decrease the uncertainty by the number of observations
-
-#         # Update the Agent's belief with the new mean and reduced variance
-#         self.beliefs[(patch_type, env)]['mean'] = posterior_mean
-#         self.beliefs[(patch_type, env)]['std'] = np.sqrt(posterior_var)
-#         self.mean_history[(patch_type, env)].append(posterior_mean)
-#         self.std_history[(patch_type, env)].append(np.sqrt(posterior_var))
-
-#     def calculate_model_likelihoods(self, observed_data):
-#         likelihoods = {}
-#         for model in self.model_weights.keys():
-#             if model == 'exponential':
-#                 likelihoods['exponential'] = self.exponential_likelihood(observed_data)
-#             elif model == 'linear':
-#                 likelihoods['linear'] = self.linear_likelihood(observed_data)
-#             elif model == 'quadratic':
-#                 likelihoods['quadratic'] = self.quadratic_likelihood(observed_data)
-#         return likelihoods
-
-#     def update_model_weights(self, likelihoods):
-#         total_likelihood = sum(likelihoods.values())
-#         for model in self.model_weights.keys():
-#             self.model_weights[model] *= likelihoods[model] / total_likelihood
-
-#     def estimate_exponential_decay(self, observed_data):
-#         return -np.log(observed_data[-1] / observed_data[0]) / len(observed_data)
-
-#     def estimate_linear_decay(self, observed_data):
-#         X = np.arange(len(observed_data)).reshape(-1, 1)
-#         y = np.array(observed_data)
-#         model = LinearRegression().fit(X, y)
-#         return -model.coef_[0]
-
-#     def estimate_quadratic_decay(self, observed_data):
-#         X = np.arange(len(observed_data)).reshape(-1, 1)
-#         y = np.array(observed_data)
-#         X_quadratic = np.hstack((X, X**2))
-#         model = LinearRegression().fit(X_quadratic, y)
-#         return -model.coef_[1]  # Decay rate from the quadratic term
-
-#     def exponential_likelihood(self, observed_data):
-#         decay_rate = self.estimate_exponential_decay(observed_data)
-#         predicted = [observed_data[0] * np.exp(-decay_rate * t) for t in range(len(observed_data))]
-#         return np.prod(norm.pdf(observed_data, loc=predicted))
-
-#     def linear_likelihood(self, observed_data):
-#         decay_rate = self.estimate_linear_decay(observed_data)
-#         predicted = [observed_data[0] - decay_rate * t for t in range(len(observed_data))]
-#         return np.prod(norm.pdf(observed_data, loc=predicted))
-
-#     def quadratic_likelihood(self, observed_data):
-#         decay_rate = self.estimate_quadratic_decay(observed_data)
-#         predicted = [observed_data[0] - decay_rate * t**2 for t in range(len(observed_data))]
-#         return np.prod(norm.pdf(observed_data, loc=predicted))
-
-#     def decide_leave(self, reward, average_reward):
-#         return reward < average_reward
-
-# class Simulation:
-#     def __init__(self, decay_rate_means, decay_rate_stds, avg_rewards, observation_var=0.01, batch_size=10):
-#         self.decay_rate_means = decay_rate_means
-#         self.decay_rate_stds = decay_rate_stds
-#         self.avg_rewards = avg_rewards
-#         self.observation_var = observation_var
-#         self.batch_size = batch_size
-#         self.patch_types = self.initialize_env()
-
-#     def initialize_env(self):
-#         patch_types = [
-#             {'type': 1, 'initial_yield': 32.5, 'decay_rate_mean': 0.075},
-#             {'type': 2, 'initial_yield': 45, 'decay_rate_mean': 0.075},
-#             {'type': 3, 'initial_yield': 57.5, 'decay_rate_mean': 0.075}
-#         ]
-#         return patch_types
-
-#     def get_patch_info(self, patch_type):
-#         for patch in self.patch_types:
-#             if patch['type'] == patch_type:
-#                 return patch
-#         raise ValueError("Patch type not found")
-
-#     def simulate_subject(self, subject_df, agent, avg_reward, env, n_max=1000):
-#         patch_sequence = []
-#         leave_times = []
-
-#         for _, trial in subject_df.iterrows():
-#             patch_info = self.get_patch_info(trial['patch'])
-#             patch = Patch(
-#                 patch_info['initial_yield'], 
-#                 patch_info['decay_rate_mean']
-#             )
-#             patch.start_harvesting()
+        if self.observation_var > 0:
+            # Adjust the observation variance to decrease with more observations
+            adjusted_observation_var = self.observation_var / count
             
-#             # Sample decay rate based on the agent's belief
-#             sampled_decay_rate = agent.sample_decay_rate(trial['patch'], env)
-#             patch.decay_rate = sampled_decay_rate  # Apply the sampled decay rate to the patch
+            # Bayesian update for the mean and variance
+            posterior_mean = (prior_var * observed_decay_rate + adjusted_observation_var * prior_mean) / (prior_var + adjusted_observation_var)
+            posterior_var = (prior_var * adjusted_observation_var) / (prior_var + adjusted_observation_var)
+        else:
+            # Simple averaging for the mean if observation variance is zero
+            posterior_mean = (prior_mean * (count - 1) + observed_decay_rate) / count
+            posterior_var = prior_var * (count - 1) / count  # Decrease the uncertainty by the number of observations
 
-#             observed_rewards = []
-#             for t in range(1, n_max + 1):
-#                 reward = patch.get_reward()
-#                 observed_rewards.append(reward)
-                
-#                 # Update belief at the end of each batch
-#                 if t % self.batch_size == 0:
-#                     agent.update_belief(trial['patch'], env, observed_rewards)
+        # Update the Agent's belief with the new mean and reduced variance
+        self.beliefs[(patch_type, env)]['mean'] = posterior_mean
+        self.beliefs[(patch_type, env)]['std'] = np.sqrt(posterior_var)
 
-#                 if agent.decide_leave(reward, avg_reward):
-#                     # Final belief update upon leaving the patch
-#                     agent.update_belief(trial['patch'], env, observed_rewards)
-#                     patch_sequence.append(trial['patch'])
-#                     leave_times.append(t)
-#                     break
+        # Log the updated belief
+        self.mean_history[(patch_type, env)].append(posterior_mean)
+        self.std_history[(patch_type, env)].append(np.sqrt(posterior_var))
 
-#         return patch_sequence, leave_times
+    # Method 1: Rescorla-Wagner Model
+    def update_belief_rescorla_wagner(self, patch_type, env, observed_reward, expected_reward):
+        belief = self.beliefs[(patch_type, env)]
+        prediction_error = observed_reward - expected_reward
+        updated_mean = belief['mean'] + self.learning_rate * prediction_error
 
-#     def run_simulation(self, df_trials, subject_id=None):
-#         simulated_leave_times = []
-#         if subject_id is not None:
-#             subject_df = df_trials[df_trials['sub'] == subject_id]
-#             patch_sequence = []
-#             agent = Agent(
-#                 decay_rate_means=self.decay_rate_means,
-#                 decay_rate_stds=self.decay_rate_stds,
-#                 observation_var=self.observation_var
-#             )
-#             for env in subject_df['env'].unique():
-#                 avg_reward = self.avg_rewards[(subject_id, env)]
-#                 subject_env_df = subject_df[subject_df['env'] == env]
-#                 seq, leave_times = self.simulate_subject(subject_env_df, agent, avg_reward, env)
-#                 patch_sequence.extend(seq)
-#                 simulated_leave_times.extend(leave_times)
-#             return agent, patch_sequence, simulated_leave_times
-#         else:
-#             for subject in df_trials['sub'].unique():
-#                 subject_df = df_trials[df_trials['sub'] == subject]
-#                 for env in subject_df['env'].unique():
-#                     avg_reward = self.avg_rewards[(subject, env)]
-#                     agent = Agent(
-#                         decay_rate_means=self.decay_rate_means,
-#                         decay_rate_stds=self.decay_rate_stds,
-#                         observation_var=self.observation_var
-#                     )
-#                     subject_env_df = subject_df[subject_df['env'] == env]
-#                     _, leave_times = self.simulate_subject(subject_env_df, agent, avg_reward, env)
-#                     simulated_leave_times.extend(leave_times)
-#             df_trials['simulated_leaveT'] = simulated_leave_times
-#             df_trials['simulated_dmLeave'] = df_trials['simulated_leaveT'] - df_trials['meanLT']
-#             return df_trials
+        # Ensure decay rate stays positive
+        updated_mean = max(updated_mean, 0)
+        
+        belief['mean'] = updated_mean
+        self.mean_history[(patch_type, env)].append(updated_mean)
+
+    # Method 2: Exponential Moving Average (EMA)
+    def update_belief_ema(self, patch_type, env, observed_decay_rate):
+        belief = self.beliefs[(patch_type, env)]
+        updated_mean = self.ema_alpha * observed_decay_rate + (1 - self.ema_alpha) * belief['mean']
+        
+        belief['mean'] = updated_mean
+        self.mean_history[(patch_type, env)].append(updated_mean)
+
+    # Method 3: Gaussian Mixture Model (GMM)
+    def update_belief_gmm(self, patch_type, env):
+        belief = self.beliefs[(patch_type, env)]
+        reward_data = self.reward_history[(patch_type, env)]
+        if len(reward_data) >= self.n_components:  # Only fit GMM if enough data is available
+            gmm = GaussianMixture(n_components=self.n_components)
+            gmm.fit(np.array(reward_data).reshape(-1, 1))
+            means = gmm.means_.flatten()
+            weights = gmm.weights_.flatten()
+
+            # Update the belief mean as a weighted average of GMM components
+            updated_mean = np.dot(means, weights)
+            updated_std = np.sqrt(np.dot(weights, (means - updated_mean)**2 + gmm.covariances_.flatten()))
+
+            belief['mean'] = updated_mean
+            belief['std'] = updated_std
+
+        self.mean_history[(patch_type, env)].append(belief['mean'])
+        self.std_history[(patch_type, env)].append(belief['std'])
+
+    def record_reward(self, patch_type, env, reward):
+        self.reward_history[(patch_type, env)].append(reward)
+
+    # Method 4: Fixed Decay Parameter with Noise
+    def get_reward_with_noise(self, initial_yield, true_decay_rate, time):
+        noise = np.random.normal(0, self.noise_std)
+        return max(0.1, initial_yield * np.exp(-(true_decay_rate + noise) * time))
+
+    # Method 5: Random Walk on Decay Parameter
+    def update_belief_random_walk(self, patch_type, env, step_size=0.001):
+        belief = self.beliefs[(patch_type, env)]
+        prior_mean = belief['mean']
+        random_walk = np.random.normal(0, step_size)
+        
+        # Update with a small random walk
+        new_mean = prior_mean + random_walk
+        
+        # Keep the mean within reasonable bounds
+        new_mean = max(0, new_mean)
+
+        self.beliefs[(patch_type, env)]['mean'] = new_mean
+        self.mean_history[(patch_type, env)].append(new_mean)
+
+    # Method 6: Two-Level Bayesian Model
+    def update_belief_hierarchical(self, patch_type, env, observed_decay_rate, learning_rate=0.1):
+        belief = self.beliefs[(patch_type, env)]
+        prior_mean = belief['mean']
+        
+        # Update environment-level belief while subject-level remains stable
+        updated_mean = prior_mean + learning_rate * (observed_decay_rate - prior_mean)
+        belief['mean'] = updated_mean
+
+        self.mean_history[(patch_type, env)].append(updated_mean)
+
+    # Method 7: No Update to the Mean Decay Parameter
+    def update_belief_no_mean_change(self, patch_type, env, observed_decay_rate):
+        belief = self.beliefs[(patch_type, env)]
+        belief['count'] += 1
+        
+        # Only reduce the variance, do not change the mean
+        prior_var = belief['std'] ** 2
+        new_var = prior_var * belief['count'] / (belief['count'] + 1)
+        belief['std'] = np.sqrt(new_var)
+
+        self.std_history[(patch_type, env)].append(np.sqrt(new_var))
+
+    # Existing Methods (Decide Leave, etc.)
+    def decide_leave(self, reward, average_reward):
+        return reward < average_reward
+    
+class AgentWithMemory:
+    def __init__(self, decay_rate_means, decay_rate_stds, method='bayesian', observation_var=0.00001, noise_std=0.01, learning_rate=0.1, ema_alpha=0.1, n_components=2, memory_size=10):
+        self.decay_rate_means = decay_rate_means
+        self.decay_rate_stds = decay_rate_stds
+        self.observation_var = observation_var
+        self.noise_std = noise_std
+        self.learning_rate = learning_rate
+        self.ema_alpha = ema_alpha
+        self.n_components = n_components
+        self.method = method
+        self.memory_size = memory_size
+
+        self.beliefs = {(i+1, env): {'mean': decay_rate_means[i], 'std': decay_rate_stds[i], 'count': 0}
+                        for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.mean_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.std_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.reward_history = {(i+1, env): deque(maxlen=self.memory_size) for i in range(len(decay_rate_means)) for env in [1, 2]}
+
+    def sample_decay_rate(self, patch_type, env):
+        belief = self.beliefs[(patch_type, env)]
+        return np.random.normal(belief['mean'], belief['std'])
+
+    def update_belief(self, patch_type, env, observed_decay_rate=None, observed_reward=None, expected_reward=None):
+        if self.method == 'bayesian':
+            self.update_belief_bayesian(patch_type, env)
+        elif self.method == 'rescorla_wagner':
+            self.update_belief_rescorla_wagner(patch_type, env, observed_reward, expected_reward)
+        elif self.method == 'ema':
+            self.update_belief_ema(patch_type, env)
+        elif self.method == 'gmm':
+            self.update_belief_gmm(patch_type, env)
+        elif self.method == 'fixed_noise':
+            self.get_reward_with_noise(patch_type, env, observed_decay_rate)
+        elif self.method == 'random_walk':
+            self.update_belief_random_walk(patch_type, env)
+        elif self.method == 'hierarchical':
+            self.update_belief_hierarchical(patch_type, env)
+        elif self.method == 'no_mean_change':
+            self.update_belief_no_mean_change(patch_type, env)
+
+    def update_belief_bayesian(self, patch_type, env):
+        reward_history = np.array(self.reward_history[(patch_type, env)])
+        if len(reward_history) > 0:
+            observed_decay_rate = -np.log(reward_history[-1] / reward_history[0]) / len(reward_history)
+            belief = self.beliefs[(patch_type, env)]
+            prior_mean = belief['mean']
+            prior_var = belief['std'] ** 2
+            belief['count'] += 1
+            count = belief['count']
+
+            if self.observation_var > 0:
+                adjusted_observation_var = self.observation_var / count
+                posterior_mean = (prior_var * observed_decay_rate + adjusted_observation_var * prior_mean) / (prior_var + adjusted_observation_var)
+                posterior_var = (prior_var * adjusted_observation_var) / (prior_var + adjusted_observation_var)
+            else:
+                posterior_mean = (prior_mean * (count - 1) + observed_decay_rate) / count
+                posterior_var = prior_var * (count - 1) / count
+
+            self.beliefs[(patch_type, env)]['mean'] = posterior_mean
+            self.beliefs[(patch_type, env)]['std'] = np.sqrt(posterior_var)
+
+            self.mean_history[(patch_type, env)].append(posterior_mean)
+            self.std_history[(patch_type, env)].append(np.sqrt(posterior_var))
+
+    def update_belief_rescorla_wagner(self, patch_type, env, observed_reward=None, expected_reward=None):
+        reward_history = np.array(self.reward_history[(patch_type, env)])
+        if len(reward_history) > 0:
+            prediction_error = observed_reward - expected_reward if observed_reward is not None else reward_history[-1] - np.mean(reward_history[:-1])
+            belief = self.beliefs[(patch_type, env)]
+            updated_mean = belief['mean'] + self.learning_rate * prediction_error
+
+            updated_mean = max(updated_mean, 0)
+            belief['mean'] = updated_mean
+            self.mean_history[(patch_type, env)].append(updated_mean)
+
+    def update_belief_ema(self, patch_type, env):
+        reward_history = np.array(self.reward_history[(patch_type, env)])
+        if len(reward_history) > 0:
+            observed_decay_rate = -np.log(reward_history[-1] / reward_history[0]) / len(reward_history)
+            belief = self.beliefs[(patch_type, env)]
+            updated_mean = self.ema_alpha * observed_decay_rate + (1 - self.ema_alpha) * belief['mean']
+
+            belief['mean'] = updated_mean
+            self.mean_history[(patch_type, env)].append(updated_mean)
+
+    def update_belief_gmm(self, patch_type, env):
+        reward_history = np.array(self.reward_history[(patch_type, env)]).reshape(-1, 1)
+        if len(reward_history) >= self.n_components:
+            gmm = GaussianMixture(n_components=self.n_components)
+            gmm.fit(reward_history)
+            means = gmm.means_.flatten()
+            weights = gmm.weights_.flatten()
+
+            updated_mean = np.dot(means, weights)
+            updated_std = np.sqrt(np.dot(weights, (means - updated_mean)**2 + gmm.covariances_.flatten()))
+
+            belief = self.beliefs[(patch_type, env)]
+            belief['mean'] = updated_mean
+            belief['std'] = updated_std
+
+            self.mean_history[(patch_type, env)].append(updated_mean)
+            self.std_history[(patch_type, env)].append(updated_std)
+
+    def record_reward(self, patch_type, env, reward):
+        self.reward_history[(patch_type, env)].append(reward)
+
+    def update_belief_random_walk(self, patch_type, env, step_size=0.001):
+        belief = self.beliefs[(patch_type, env)]
+        random_walk = np.random.normal(0, step_size)
+        belief['mean'] += random_walk
+        belief['mean'] = max(belief['mean'], 0)
+        self.mean_history[(patch_type, env)].append(belief['mean'])
+
+    def update_belief_hierarchical(self, patch_type, env):
+        belief = self.beliefs[(patch_type, env)]
+        reward_history = np.array(self.reward_history[(patch_type, env)])
+        if len(reward_history) > 0:
+            observed_decay_rate = -np.log(reward_history[-1] / reward_history[0]) / len(reward_history)
+            updated_mean = belief['mean'] + self.learning_rate * (observed_decay_rate - belief['mean'])
+            belief['mean'] = updated_mean
+            self.mean_history[(patch_type, env)].append(updated_mean)
+
+    def update_belief_no_mean_change(self, patch_type, env):
+        belief = self.beliefs[(patch_type, env)]
+        belief['count'] += 1
+        prior_var = belief['std'] ** 2
+        new_var = prior_var * belief['count'] / (belief['count'] + 1)
+        belief['std'] = np.sqrt(new_var)
+        self.std_history[(patch_type, env)].append(belief['std'])
+                                                          
+    def decide_leave(self, reward, average_reward):
+        return reward < average_reward
