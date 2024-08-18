@@ -78,12 +78,165 @@ class Patch:
         else:
             return self.initial_yield
 
+# class Simulation:
+#     def __init__(self, decay_rate_means, decay_rate_stds, avg_rewards, observation_var=0.01, learning_rate=0.1, method='bayesian', random_seed=None):
+#         self.decay_rate_means = decay_rate_means
+#         self.decay_rate_stds = decay_rate_stds
+#         self.avg_rewards = avg_rewards
+#         self.observation_var = observation_var
+#         self.learning_rate = learning_rate
+#         self.method = method
+#         self.patch_types = self.initialize_env()
+
+#         if random_seed is not None:
+#             np.random.seed(random_seed)
+
+#     def initialize_env(self):
+#         patch_types = [
+#             {'type': 1, 'initial_yield': 32.5, 'decay_rate_mean': 0.075},
+#             {'type': 2, 'initial_yield': 45, 'decay_rate_mean': 0.075},
+#             {'type': 3, 'initial_yield': 57.5, 'decay_rate_mean': 0.075}
+#         ]
+#         return patch_types
+
+#     def get_patch_info(self, patch_type):
+#         for patch in self.patch_types:
+#             if patch['type'] == patch_type:
+#                 return patch
+#         raise ValueError("Patch type not found")
+
+#     # def simulate_subject(self, subject_df, agent, avg_reward, env, n_max=1000):
+#     #     patch_sequence = []
+#     #     leave_times = []
+
+#     #     for _, trial in subject_df.iterrows():
+#     #         patch_info = self.get_patch_info(trial['patch'])
+#     #         patch = Patch(
+#     #             patch_info['initial_yield'], 
+#     #             patch_info['decay_rate_mean']
+#     #         )
+#     #         patch.start_harvesting()
+            
+#     #         # Sample decay rate based on the updated belief
+#     #         sampled_decay_rate = agent.sample_decay_rate(trial['patch'], env)
+#     #         patch.decay_rate = sampled_decay_rate  # Apply the sampled decay rate to the patch
+
+#     #         for t in range(1, n_max + 1):
+#     #             reward = patch.get_reward()
+
+#     #             if agent.decide_leave(reward, avg_reward) or t>=n_max:
+#     #                 observed_decay_rate = -np.log(reward / patch_info['initial_yield']) / t if t > 0 else sampled_decay_rate
+#     #                 agent.update_belief(trial['patch'], env, observed_decay_rate)
+#     #                 patch_sequence.append(trial['patch'])
+#     #                 leave_times.append(t)
+#     #                 break
+
+#     #     return patch_sequence, leave_times
+#     def simulate_subject(self, subject_df, agent, avg_reward, env, n_max=1000):
+#         patch_sequence = []
+#         leave_times = []
+
+#         for _, trial in subject_df.iterrows():
+#             patch_info = self.get_patch_info(trial['patch'])
+#             patch = Patch(
+#                 patch_info['initial_yield'], 
+#                 patch_info['decay_rate_mean']
+#             )
+#             patch.start_harvesting()
+            
+#             # Sample decay rate based on the updated belief
+#             sampled_decay_rate = agent.sample_decay_rate(trial['patch'], env)
+#             patch.decay_rate = sampled_decay_rate  # Apply the sampled decay rate to the patch
+
+#             for t in range(1, n_max + 1):
+#                 if agent.method == 'fixed_noise':
+#                     # Calculate reward using the fixed noise method
+#                     reward = agent.get_reward_with_noise(
+#                         initial_yield=patch_info['initial_yield'], 
+#                         true_decay_rate=sampled_decay_rate, 
+#                         time=t
+#                     )
+#                 else:
+#                     # Default reward calculation
+#                     reward = patch.get_reward()
+
+#                 # Calculate expected reward using the fixed decay parameter if using Rescorla-Wagner
+#                 if agent.method == 'rescorla_wagner':
+#                     fixed_decay_rate = 0.075  # Set the fixed decay parameter here
+#                     expected_reward = agent.calculate_expected_reward(
+#                         initial_yield=patch_info['initial_yield'], 
+#                         decay_rate=fixed_decay_rate, 
+#                         time=t
+#                     )
+#                 else:
+#                     expected_reward = avg_reward  # Use average reward for other methods
+
+#                 if agent.decide_leave(reward, avg_reward) or t >= n_max:
+#                     if agent.method not in ['fixed_noise', 'random_walk', 'no_mean_change']:
+#                         observed_decay_rate = -np.log(reward / patch_info['initial_yield']) / t if t > 0 else sampled_decay_rate
+#                     else:
+#                         observed_decay_rate = sampled_decay_rate
+                    
+#                     # Update belief based on the specific method
+#                     agent.update_belief(trial['patch'], env, observed_decay_rate, reward, expected_reward)
+                    
+#                     patch_sequence.append(trial['patch'])
+#                     leave_times.append(t)
+#                     break
+
+#         return patch_sequence, leave_times
+
+#     def run_simulation(self, df_trials, subject_id=None):
+#         simulated_leave_times = []
+#         if subject_id is not None:
+#             subject_df = df_trials[df_trials['sub'] == subject_id]
+#             patch_sequence = []
+#             agent = MultipleAgent(
+#                 decay_rate_means=self.decay_rate_means, 
+#                 decay_rate_stds=self.decay_rate_stds, 
+#                 method=self.method, 
+#                 observation_var=self.observation_var,
+#                 learning_rate=self.learning_rate
+#                 )
+#             for env in subject_df['env'].unique():
+#                 avg_reward = self.avg_rewards[(subject_id, env)]
+#                 subject_env_df = subject_df[subject_df['env'] == env]
+#                 seq, leave_times = self.simulate_subject(subject_env_df, agent, avg_reward, env)
+#                 patch_sequence.extend(seq)
+#                 simulated_leave_times.extend(leave_times)
+#             return agent, patch_sequence, simulated_leave_times
+#         else:
+#             for subject in df_trials['sub'].unique():
+#                 subject_df = df_trials[df_trials['sub'] == subject]
+#                 for env in subject_df['env'].unique():
+#                     avg_reward = self.avg_rewards[(subject, env)]
+#                     agent = MultipleAgent(
+#                         decay_rate_means=self.decay_rate_means, 
+#                         decay_rate_stds=self.decay_rate_stds, 
+#                         method=self.method, 
+#                         observation_var=self.observation_var,
+#                         learning_rate=self.learning_rate
+#                         )
+#                     subject_env_df = subject_df[subject_df['env'] == env]
+#                     _, leave_times = self.simulate_subject(subject_env_df, agent, avg_reward, env)
+#                     simulated_leave_times.extend(leave_times)
+#             df_trials['simulated_leaveT'] = simulated_leave_times
+#             df_trials['simulated_dmLeave'] = df_trials['simulated_leaveT'] - df_trials['meanLT']
+#             return df_trials
+
 class Simulation:
-    def __init__(self, decay_rate_means, decay_rate_stds, avg_rewards, observation_var=0.01, random_seed=None):
+    def __init__(self, decay_rate_means, decay_rate_stds, avg_rewards, observation_var=0.01, learning_rate=0.1, ema_alpha=0.1, noise_std=0.01, noise_decay_rate=0.95, step_size=0.001, n_components=2, random_seed=None, method='ema'):
         self.decay_rate_means = decay_rate_means
         self.decay_rate_stds = decay_rate_stds
         self.avg_rewards = avg_rewards
         self.observation_var = observation_var
+        self.learning_rate = learning_rate  # For Rescorla-Wagner
+        self.ema_alpha = ema_alpha  # For EMA
+        self.noise_std = noise_std  # For Fixed Noise
+        self.noise_decay_rate = noise_decay_rate  # Rate at which noise decreases
+        self.step_size = step_size  # For Random Walk
+        self.n_components = n_components  # For GMM
+        self.method = method  # Method for belief updating
         self.patch_types = self.initialize_env()
 
         if random_seed is not None:
@@ -103,6 +256,69 @@ class Simulation:
                 return patch
         raise ValueError("Patch type not found")
 
+    def create_agent(self, method):
+        """
+        Create and configure a MultipleAgent instance based on the selected method.
+        """
+        if method == 'bayesian':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                observation_var=self.observation_var
+            )
+        elif method == 'rescorla_wagner':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                learning_rate=self.learning_rate
+            )
+        elif method == 'ema':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                ema_alpha=self.ema_alpha
+            )
+        # elif method == 'gmm':
+        #     return MultipleAgent(
+        #         decay_rate_means=self.decay_rate_means, 
+        #         decay_rate_stds=self.decay_rate_stds, 
+        #         method=method,
+        #         n_components=self.n_components
+        #     )
+        elif method == 'fixed_noise':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                noise_std=self.noise_std,
+                noise_decay_rate=self.noise_decay_rate
+            )
+        elif method == 'random_walk':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                step_size=self.step_size
+            )
+        elif method == 'hierarchical':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method,
+                learning_rate=self.learning_rate
+            )
+        elif method == 'no_mean_change':
+            return MultipleAgent(
+                decay_rate_means=self.decay_rate_means, 
+                decay_rate_stds=self.decay_rate_stds, 
+                method=method
+            )
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
     def simulate_subject(self, subject_df, agent, avg_reward, env, n_max=1000):
         patch_sequence = []
         leave_times = []
@@ -120,11 +336,39 @@ class Simulation:
             patch.decay_rate = sampled_decay_rate  # Apply the sampled decay rate to the patch
 
             for t in range(1, n_max + 1):
-                reward = patch.get_reward()
+                if agent.method == 'fixed_noise':
+                    # Calculate reward using the fixed noise method
+                    reward = agent.get_reward_with_noise(
+                        initial_yield=patch_info['initial_yield'], 
+                        true_decay_rate=0.075, 
+                        time=t,
+                        env=env
+                    )
+                else:
+                    # Default reward calculation
+                    reward = patch.get_reward()
+                    agent.record_reward(trial['patch'], env, reward)
 
-                if agent.decide_leave(reward, avg_reward) or t>=n_max:
-                    observed_decay_rate = -np.log(reward / patch_info['initial_yield']) / t if t > 0 else sampled_decay_rate
-                    agent.update_belief(trial['patch'], env, observed_decay_rate)
+                # Calculate expected reward using the fixed decay parameter if using Rescorla-Wagner
+                if agent.method == 'rescorla_wagner':
+                    fixed_decay_rate = 0.075  # Set the fixed decay parameter here
+                    expected_reward = agent.calculate_expected_reward(
+                        initial_yield=patch_info['initial_yield'], 
+                        decay_rate=fixed_decay_rate, 
+                        time=t
+                    )
+                else:
+                    expected_reward = avg_reward  # Use average reward for other methods
+
+                if agent.decide_leave(reward, avg_reward) or t >= n_max:
+                    if agent.method not in ['fixed_noise', 'random_walk', 'no_mean_change']:
+                        observed_decay_rate = -np.log(reward / patch_info['initial_yield']) / t if t > 0 else sampled_decay_rate
+                    else:
+                        observed_decay_rate = sampled_decay_rate
+                    
+                    # Update belief based on the specific method
+                    agent.update_belief(trial['patch'], env, observed_decay_rate, reward, expected_reward)
+                    
                     patch_sequence.append(trial['patch'])
                     leave_times.append(t)
                     break
@@ -136,7 +380,7 @@ class Simulation:
         if subject_id is not None:
             subject_df = df_trials[df_trials['sub'] == subject_id]
             patch_sequence = []
-            agent = Agent(decay_rate_means=self.decay_rate_means, decay_rate_stds=self.decay_rate_stds, observation_var=self.observation_var)
+            agent = self.create_agent(method=self.method)
             for env in subject_df['env'].unique():
                 avg_reward = self.avg_rewards[(subject_id, env)]
                 subject_env_df = subject_df[subject_df['env'] == env]
@@ -149,7 +393,7 @@ class Simulation:
                 subject_df = df_trials[df_trials['sub'] == subject]
                 for env in subject_df['env'].unique():
                     avg_reward = self.avg_rewards[(subject, env)]
-                    agent = Agent(decay_rate_means=self.decay_rate_means, decay_rate_stds=self.decay_rate_stds, observation_var=self.observation_var)
+                    agent = self.create_agent(method=self.method)
                     subject_env_df = subject_df[subject_df['env'] == env]
                     _, leave_times = self.simulate_subject(subject_env_df, agent, avg_reward, env)
                     simulated_leave_times.extend(leave_times)
@@ -158,11 +402,12 @@ class Simulation:
             return df_trials
 
 class MultipleAgent:
-    def __init__(self, decay_rate_means, decay_rate_stds, method='bayesian', observation_var=0.00001, noise_std=0.01, learning_rate=0.1, ema_alpha=0.1, n_components=2):
+    def __init__(self, decay_rate_means, decay_rate_stds, method='bayesian', observation_var=0.00001, noise_std=0.01, noise_decay_rate = 0.95, learning_rate=0.1, ema_alpha=0.1, n_components=2):
         self.decay_rate_means = decay_rate_means
         self.decay_rate_stds = decay_rate_stds
         self.observation_var = observation_var
         self.noise_std = noise_std
+        self.noise_decay_rate = noise_decay_rate
         self.learning_rate = learning_rate
         self.ema_alpha = ema_alpha
         self.n_components = n_components
@@ -173,10 +418,17 @@ class MultipleAgent:
         self.mean_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
         self.std_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
         self.reward_history = {(i+1, env): [] for i in range(len(decay_rate_means)) for env in [1, 2]}
+        self.observation_counts = {env: 0 for env in [1, 2]}
 
     def sample_decay_rate(self, patch_type, env):
         belief = self.beliefs[(patch_type, env)]
         return np.random.normal(belief['mean'], belief['std'])
+
+    def calculate_expected_reward(self, initial_yield, decay_rate, time):
+        """
+        Calculate the expected reward using the fixed decay parameter.
+        """
+        return max(0.1, initial_yield * np.exp(-decay_rate * time))
 
     def update_belief(self, patch_type, env, observed_decay_rate=None, observed_reward=None, expected_reward=None):
         if self.method == 'bayesian':
@@ -188,7 +440,8 @@ class MultipleAgent:
         elif self.method == 'gmm':
             self.update_belief_gmm(patch_type, env)
         elif self.method == 'fixed_noise':
-            self.get_reward_with_noise(patch_type, env, observed_decay_rate)
+            # No update to the belief, we directly generate noisy rewards instead
+            pass
         elif self.method == 'random_walk':
             self.update_belief_random_walk(patch_type, env)
         elif self.method == 'hierarchical':
@@ -244,32 +497,47 @@ class MultipleAgent:
         belief['mean'] = updated_mean
         self.mean_history[(patch_type, env)].append(updated_mean)
 
-    # Method 3: Gaussian Mixture Model (GMM)
-    def update_belief_gmm(self, patch_type, env):
-        belief = self.beliefs[(patch_type, env)]
-        reward_data = self.reward_history[(patch_type, env)]
-        if len(reward_data) >= self.n_components:  # Only fit GMM if enough data is available
-            gmm = GaussianMixture(n_components=self.n_components)
-            gmm.fit(np.array(reward_data).reshape(-1, 1))
-            means = gmm.means_.flatten()
-            weights = gmm.weights_.flatten()
+    # # Method 3: Gaussian Mixture Model (GMM)
+    # def update_belief_gmm(self, patch_type, env):
+    #     belief = self.beliefs[(patch_type, env)]
+    #     reward_data = self.reward_history[(patch_type, env)]
+    #     print(reward_data)
+    #     if len(reward_data) >= self.n_components:  # Only fit GMM if enough data is available
+    #         gmm = GaussianMixture(n_components=self.n_components)
+    #         gmm.fit(np.array(reward_data).reshape(-1, 1))
+    #         means = gmm.means_.flatten()
+    #         weights = gmm.weights_.flatten()
 
-            # Update the belief mean as a weighted average of GMM components
-            updated_mean = np.dot(means, weights)
-            updated_std = np.sqrt(np.dot(weights, (means - updated_mean)**2 + gmm.covariances_.flatten()))
+    #         # Update the belief mean as a weighted average of GMM components
+    #         updated_mean = np.dot(means, weights)
+    #         updated_std = np.sqrt(np.dot(weights, (means - updated_mean)**2 + gmm.covariances_.flatten()))
+    #         print(updated_mean, updated_std)
+    #         belief['mean'] = updated_mean
+    #         belief['std'] = updated_std
 
-            belief['mean'] = updated_mean
-            belief['std'] = updated_std
+    #         self.beliefs[(patch_type, env)]['mean'] = updated_mean
+    #         self.beliefs[(patch_type, env)]['std'] = updated_std
 
-        self.mean_history[(patch_type, env)].append(belief['mean'])
-        self.std_history[(patch_type, env)].append(belief['std'])
+    #         if (patch_type, env) not in self.mean_history:
+    #             self.mean_history[(patch_type, env)] = []
+    #         if (patch_type, env) not in self.std_history:
+    #             self.std_history[(patch_type, env)] = []
+    #         if (patch_type, env) not in self.beliefs[(patch_type, env)]:
+    #             self.beliefs[(patch_type, env)]['count'] = 0
+
+    #         self.mean_history[(patch_type, env)].append(belief['mean'])
+    #         self.std_history[(patch_type, env)].append(belief['std'])
 
     def record_reward(self, patch_type, env, reward):
         self.reward_history[(patch_type, env)].append(reward)
 
     # Method 4: Fixed Decay Parameter with Noise
-    def get_reward_with_noise(self, initial_yield, true_decay_rate, time):
-        noise = np.random.normal(0, self.noise_std)
+    def get_reward_with_noise(self, initial_yield, true_decay_rate, time, env):
+        self.observation_counts[env] += 1
+        current_noise_std = self.noise_std * (self.noise_decay_rate ** self.observation_counts[env])
+
+        # Calculate the reward with decreasing noise
+        noise = np.random.normal(0, current_noise_std)
         return max(0.1, initial_yield * np.exp(-(true_decay_rate + noise) * time))
 
     # Method 5: Random Walk on Decay Parameter
