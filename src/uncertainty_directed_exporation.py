@@ -540,20 +540,20 @@ class MultipleAgent:
         noise = np.random.normal(0, current_noise_std)
         return max(0.1, initial_yield * np.exp(-(true_decay_rate + noise) * time))
 
-    # Method 5: Random Walk on Decay Parameter
-    def update_belief_random_walk(self, patch_type, env, step_size=0.001):
-        belief = self.beliefs[(patch_type, env)]
-        prior_mean = belief['mean']
-        random_walk = np.random.normal(0, step_size)
+    # # Method 5: Random Walk on Decay Parameter
+    # def update_belief_random_walk(self, patch_type, env, step_size=0.001):
+    #     belief = self.beliefs[(patch_type, env)]
+    #     prior_mean = belief['mean']
+    #     random_walk = np.random.normal(0, step_size)
         
-        # Update with a small random walk
-        new_mean = prior_mean + random_walk
+    #     # Update with a small random walk
+    #     new_mean = prior_mean + random_walk
         
-        # Keep the mean within reasonable bounds
-        new_mean = max(0, new_mean)
+    #     # Keep the mean within reasonable bounds
+    #     new_mean = max(0, new_mean)
 
-        self.beliefs[(patch_type, env)]['mean'] = new_mean
-        self.mean_history[(patch_type, env)].append(new_mean)
+    #     self.beliefs[(patch_type, env)]['mean'] = new_mean
+    #     self.mean_history[(patch_type, env)].append(new_mean)
 
     # Method 6: Two-Level Bayesian Model
     def update_belief_hierarchical(self, patch_type, env, observed_decay_rate, learning_rate=0.1):
