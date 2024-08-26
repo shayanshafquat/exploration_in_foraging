@@ -353,7 +353,7 @@ def main():
 
     # Policy type and mellowmax type
     policy_type = 'mellowmax'  # Change this to 'softmax' or 'mellowmax' as needed
-    mellowmax_type = 'add' if policy_type == 'mellowmax' else None  # Only relevant for mellowmax
+    mellowmax_type = 'denom' if policy_type == 'mellowmax' else None  # Only relevant for mellowmax
 
     # Run all cases
     case_1_results, subject_params = run_case_1(grouped_df, patches, policy_type, mellowmax_type)
@@ -368,7 +368,7 @@ def main():
 
     # Determine the file name based on the policy type
     if policy_type == 'mellowmax':
-        results_file = f'optimization_results_{policy_type}_{mellowmax_type}_new.csv'
+        results_file = f'optimization_results_{policy_type}_{mellowmax_type}.csv'
     else:
         results_file = f'optimization_results_{policy_type}.csv'
     
