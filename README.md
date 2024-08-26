@@ -1,6 +1,8 @@
 # exploration_in_foraging
 This project will study if a model that makes stochastic choices can provide a better account of how humans and other animals make stay-or-leave decisions. 
 
+<img src="./plots/fig1.png" alt="Leheron Patch Foraging Experimental Setup" width="950" height="555">
+
 ### Explanation:
 1. **Initialization**:
     - `beta_values` and `intercept_values` are only set if the model is not `mellowmax`.
@@ -19,3 +21,4 @@ This project will study if a model that makes stochastic choices can provide a b
     - The main function initializes the `Simulation` class with appropriate parameters and calls methods to prepare and plot results.
 
 This code ensures the correct handling of different models with appropriate parameters and methods for simulations and result plotting.
+
