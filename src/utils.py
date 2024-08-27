@@ -2,6 +2,13 @@ import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 import numpy as np
 import pandas as pd
+import matplotlib
+import seaborn as sns
+from world import Patch, Agent
+from matplotlib.lines import Line2D
+
+matplotlib.rc('xtick', labelsize=15)
+matplotlib.rc('ytick', labelsize=15)
 
 def plot_model_fit_comparisons_to_subject_leaving_times(mean_times, sub_col_name, model_col_name):
     title = sub_col_name.split('_')[0]
@@ -81,7 +88,50 @@ def decay_param_evolution(agent):
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
-def compare_variability_to_subject(df_trials_with_simulation):
+def compare_mean_to_subject(df_trials_with_simulation, MVT_rich, MVT_poor, method):
+    subject_grouped_observed = df_trials_with_simulation.groupby(['sub', 'patch', 'env'])['leaveT'].mean().unstack(level=-1)
+    subject_grouped_simulated = df_trials_with_simulation.groupby(['sub', 'patch', 'env'])['simulated_leaveT'].mean().unstack(level=-1)
+
+    mean_leave_observed = subject_grouped_observed.groupby('patch').mean()
+    sem_leave_observed = subject_grouped_observed.groupby('patch').sem()
+
+    mean_leave_simulated = subject_grouped_simulated.groupby('patch').mean()
+    sem_leave_simulated = subject_grouped_simulated.groupby('patch').sem()
+
+    patch_types = ['Low', 'Mid', 'High']
+    patch_indices = np.arange(len(patch_types))
+
+    plt.figure(figsize=(4, 4))
+
+    # Adjusted labels with apostrophe
+    plt.errorbar(patch_indices, mean_leave_observed[1], yerr=sem_leave_observed[1], fmt='--o', color='blue')
+    plt.errorbar(patch_indices, mean_leave_observed[2], yerr=sem_leave_observed[2], fmt='--o', color='green')
+
+    plt.errorbar(patch_indices, mean_leave_simulated[1], yerr=sem_leave_simulated[1], fmt='-o', color='blue')
+    plt.errorbar(patch_indices, mean_leave_simulated[2], yerr=sem_leave_simulated[2], fmt='-o', color='green')
+
+    plt.plot(patch_indices, MVT_rich, 'o--', color='grey', linewidth=1, markersize=4)
+    plt.plot(patch_indices, MVT_poor, 'o--', color='grey', linewidth=1, markersize=4)
+
+    plt.xticks(patch_indices, patch_types, fontsize=14)
+    plt.xlabel('Patch Type', fontsize=14)
+    plt.ylabel('Mean Leaving Time (s)', fontsize=14)
+    # plt.title('Subjects', fontsize=14)
+    legend_elements = [
+        Line2D([0], [0], color='blue', lw=2, label="Rich", linestyle='--'),
+        Line2D([0], [0], color='green', lw=2, label="Poor", linestyle='--'),
+        Line2D([0], [0], color='black', lw=2, label="Model", linestyle='-')
+    ]
+    plt.legend(handles=legend_elements, loc='best', fontsize=14)
+
+    # Remove top and right borders
+    sns.despine()
+    plt.tight_layout()
+    save_path = f'../plots/uncertainty/{method}_sd.png'
+    plt.savefig(save_path, dpi=300)
+    plt.show()
+
+def compare_variability_to_subject(df_trials_with_simulation, method):
     subject_grouped_observed = df_trials_with_simulation.groupby(['sub', 'patch', 'env'])['leaveT'].std().unstack(level=-1)
     subject_grouped_simulated = df_trials_with_simulation.groupby(['sub', 'patch', 'env'])['simulated_leaveT'].std().unstack(level=-1)
 
@@ -94,20 +144,33 @@ def compare_variability_to_subject(df_trials_with_simulation):
     patch_types = ['Low', 'Mid', 'High']
     patch_indices = np.arange(len(patch_types))
 
-    plt.figure(figsize=(5, 3.5))
+    plt.figure(figsize=(4, 4))
 
-    plt.errorbar(patch_indices, mean_sd_observed[1], yerr=sem_sd_observed[1], fmt='o-', color='blue', label='Rich Std Dev')
-    plt.errorbar(patch_indices, mean_sd_observed[2], yerr=sem_sd_observed[2], fmt='o-', color='green', label='Poor Std Dev')
+    # Adjusted labels and linestyle for subject data
+    plt.errorbar(patch_indices, mean_sd_observed[1], yerr=sem_sd_observed[1], fmt='--o', color='blue')
+    plt.errorbar(patch_indices, mean_sd_observed[2], yerr=sem_sd_observed[2], fmt='--o', color='green')
 
-    plt.errorbar(patch_indices, mean_sd_simulated[1], yerr=sem_sd_simulated[1], fmt='--o', color='blue', label='Model Rich Std Dev')
-    plt.errorbar(patch_indices, mean_sd_simulated[2], yerr=sem_sd_simulated[2], fmt='--o', color='green', label='Model Poor Std Dev')
+    # Model data
+    plt.errorbar(patch_indices, mean_sd_simulated[1], yerr=sem_sd_simulated[1], fmt='-o', color='blue')
+    plt.errorbar(patch_indices, mean_sd_simulated[2], yerr=sem_sd_simulated[2], fmt='-o', color='green')
 
-    plt.xticks(patch_indices, patch_types)
-    plt.xlabel('Patch Type')
-    plt.ylabel('Standard Deviation in Patch Leaving Time')
-    plt.title('Standard Deviation in Leaving Times by Patch Type')
-    plt.legend(loc='best')
+    plt.xticks(patch_indices, patch_types, fontsize=14)
+    plt.xlabel('Patch Type', fontsize=14)
+    plt.ylabel(r'SD$_{\mathrm{leave}}$ (s)', fontsize=14)
+    # plt.title('Standard Deviation in Leaving Times by Patch Type', fontsize=14)
+    legend_elements = [
+        Line2D([0], [0], color='blue', lw=2, label="Rich", linestyle='--'),
+        Line2D([0], [0], color='green', lw=2, label="Poor", linestyle='--'),
+        Line2D([0], [0], color='black', lw=2, label="Model", linestyle='-')
+    ]
+    plt.legend(handles=legend_elements, loc='best', fontsize=14)
 
+    # Remove top and right borders
+    sns.despine()
+
+    plt.tight_layout()
+    save_path = f'../plots/uncertainty/{method}_mean.png'
+    plt.savefig(save_path, dpi=300)
     plt.show()
 
 def calculate_aic_bic(n, rss, k):
@@ -138,3 +201,45 @@ def calculate_subject_aic_bic(df, pred_col_name, k):
         
     results_df = pd.DataFrame(results)
     return results_df
+
+def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
+    if policy_type == 'epsilon_greedy':
+        epsilon = parameter
+        expected_leave_time = 1 / epsilon
+        variance_leave_time = (1 - epsilon) / (epsilon ** 2)
+        std_leave_time = np.sqrt(variance_leave_time)
+        return expected_leave_time, std_leave_time
+    
+    agent_kwargs = {
+        'policy_type': policy_type,
+        'beta': parameter if policy_type == 'softmax' else None,
+        'intercept': intercept,
+        'omega': parameter if policy_type == 'mellowmax' else None,
+        'use_intercept': use_intercept
+    }
+    if policy_type == 'mellowmax':
+        agent_kwargs['mellowmax_type'] = mellowmax_type
+
+    agent = Agent(**agent_kwargs)
+
+    patch.start_harvesting()
+    expected_leave_time = 0.0
+    variance_leave_time = 0.0
+    cumulative_prob = 1.0
+
+    for n in range(1, max_timesteps + 1):
+        reward = patch.get_reward()
+        prob_leave_now = agent.get_leave_probability(reward)
+        p_leave_n = prob_leave_now * cumulative_prob
+        
+        # Expected leave time E(leave)
+        expected_leave_time += n * p_leave_n
+        
+        # Variance of leave time VAR(leave)
+        variance_leave_time += ((n - expected_leave_time) ** 2) * p_leave_n
+        
+        # Update cumulative probability
+        cumulative_prob *= (1 - prob_leave_now)
+    
+    std_leave_time = np.sqrt(variance_leave_time)
+    return expected_leave_time, std_leave_time
