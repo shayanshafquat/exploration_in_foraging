@@ -221,10 +221,9 @@ def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowm
         agent_kwargs['mellowmax_type'] = mellowmax_type
 
     agent = Agent(**agent_kwargs)
-
     patch.start_harvesting()
     expected_leave_time = 0.0
-    variance_leave_time = 0.0
+    expected_leave_time_squared = 0.0  # To accumulate n^2 * p(leave at n)
     cumulative_prob = 1.0
 
     for n in range(1, max_timesteps + 1):
@@ -235,11 +234,14 @@ def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowm
         # Expected leave time E(leave)
         expected_leave_time += n * p_leave_n
         
-        # Variance of leave time VAR(leave)
-        variance_leave_time += ((n - expected_leave_time) ** 2) * p_leave_n
+        # Accumulate expected leave time squared
+        expected_leave_time_squared += (n ** 2) * p_leave_n
         
         # Update cumulative probability
         cumulative_prob *= (1 - prob_leave_now)
     
+    # Compute variance from E(X^2) - (E(X))^2
+    variance_leave_time = expected_leave_time_squared - (expected_leave_time ** 2)
     std_leave_time = np.sqrt(variance_leave_time)
+    
     return expected_leave_time, std_leave_time

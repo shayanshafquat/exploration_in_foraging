@@ -5,6 +5,7 @@ import pandas as pd
 import logging
 from scipy.optimize import minimize
 from world import Patch, Agent
+from utils import calculate_leave_statistics
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,40 +32,40 @@ def group_data(df_trials):
         count=('leaveT', 'count')
     ).reset_index()
 
-def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
-    agent_kwargs = {
-        'policy_type': policy_type,
-        'beta': parameter if policy_type == 'softmax' else None,
-        'intercept': intercept,
-        'omega': parameter if policy_type == 'mellowmax' else None,
-        'use_intercept': use_intercept
-    }
-    if policy_type == 'mellowmax':
-        agent_kwargs['mellowmax_type'] = mellowmax_type
+# def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
+#     agent_kwargs = {
+#         'policy_type': policy_type,
+#         'beta': parameter if policy_type == 'softmax' else None,
+#         'intercept': intercept,
+#         'omega': parameter if policy_type == 'mellowmax' else None,
+#         'use_intercept': use_intercept
+#     }
+#     if policy_type == 'mellowmax':
+#         agent_kwargs['mellowmax_type'] = mellowmax_type
 
-    agent = Agent(**agent_kwargs)
+#     agent = Agent(**agent_kwargs)
 
-    patch.start_harvesting()
-    expected_leave_time = 0.0
-    variance_leave_time = 0.0
-    cumulative_prob = 1.0
+#     patch.start_harvesting()
+#     expected_leave_time = 0.0
+#     variance_leave_time = 0.0
+#     cumulative_prob = 1.0
 
-    for n in range(1, max_timesteps + 1):
-        reward = patch.get_reward()
-        prob_leave_now = agent.get_leave_probability(reward)
-        p_leave_n = prob_leave_now * cumulative_prob
+#     for n in range(1, max_timesteps + 1):
+#         reward = patch.get_reward()
+#         prob_leave_now = agent.get_leave_probability(reward)
+#         p_leave_n = prob_leave_now * cumulative_prob
         
-        # Expected leave time E(leave)
-        expected_leave_time += n * p_leave_n
+#         # Expected leave time E(leave)
+#         expected_leave_time += n * p_leave_n
         
-        # Variance of leave time VAR(leave)
-        variance_leave_time += ((n - expected_leave_time) ** 2) * p_leave_n
+#         # Variance of leave time VAR(leave)
+#         variance_leave_time += ((n - expected_leave_time) ** 2) * p_leave_n
         
-        # Update cumulative probability
-        cumulative_prob *= (1 - prob_leave_now)
+#         # Update cumulative probability
+#         cumulative_prob *= (1 - prob_leave_now)
     
-    std_leave_time = np.sqrt(variance_leave_time)
-    return expected_leave_time, std_leave_time
+#     std_leave_time = np.sqrt(variance_leave_time)
+#     return expected_leave_time, std_leave_time
 
 # def simulate_agent_in_patch(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
 #     agent_kwargs = {
