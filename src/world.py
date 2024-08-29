@@ -54,13 +54,14 @@ class Agent:
             if omega is None:
                 raise ValueError("For mellowmax policy, omega must be provided.")
             self.omega = omega
-            self.intercept = intercept if use_intercept else 0
+            if not use_intercept and mellowmax_type == 'denom':
+                self.intercept = 1
+            else:
+                self.intercept = intercept if use_intercept else 0
         elif self.policy_type == 'epsilon-greedy':
-            if epsilon is None or beta is None:
-                raise ValueError("For epsilon-greedy policy, epsilon and beta must be provided.")
+            if epsilon is None:
+                raise ValueError("For epsilon-greedy policy, epsilon must be provided.")
             self.epsilon = epsilon
-            self.beta = beta
-            self.intercept = intercept if use_intercept else 0
         else:
             raise ValueError("Unsupported policy type: choose either 'softmax', 'mellowmax', or 'epsilon-greedy'.")
 
@@ -77,11 +78,13 @@ class Agent:
     
     # Epsilon-greedy policy
     def choose_action_epsilon(self, reward):
+        """ Choose action using epsilon-greedy policy. """
         if np.random.random() < self.epsilon:
-            return np.random.choice([0, 1])
+            # With probability epsilon, choose a random action (explore)
+            return np.random.choice([0, 1])  # 0: stay, 1: leave
         else:
-            leave_proba = self.leave_proba_softmax(reward)
-            return 1 if leave_proba > 0.5 else 0
+            # With probability 1 - epsilon, choose the default action (exploit)
+            return 0  # Default action is to stay
 
     # Mellowmax policy with intercept
     def mellowmax_operator(self, Q_values):
