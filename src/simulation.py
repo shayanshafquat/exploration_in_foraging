@@ -41,11 +41,17 @@ class Simulation:
                     break
         return leave_times
 
+    # def compute_stats(self, leave_times):
+    #     leave_times = np.array(leave_times)
+    #     mean_leave_time = np.mean(leave_times)
+    #     var_leave_time = np.var(leave_times)
+    #     return mean_leave_time, var_leave_time
+
     def compute_stats(self, leave_times):
         leave_times = np.array(leave_times)
         mean_leave_time = np.mean(leave_times)
-        var_leave_time = np.var(leave_times)
-        return mean_leave_time, var_leave_time
+        sem_leave_time = np.std(leave_times) / np.sqrt(len(leave_times))  # Calculate SEM instead of variance
+        return mean_leave_time, sem_leave_time
 
     def prepare_results(self):
         results = []
@@ -133,7 +139,7 @@ class Simulation:
 
         plt.tight_layout()
         if save_plots:
-            plt.savefig('../plots/mellowmax_results.png')
+            plt.savefig('../plots/mellowmax_results_simulation.png')
         else:
             plt.show()
 
@@ -145,7 +151,8 @@ class Simulation:
         intercept_colors = {intercept: color_map(i / (len(self.intercept_values) - 1)) for i, intercept in enumerate(self.intercept_values)}
 
         # Plot with constant intercept (choose a middle value)
-        constant_intercept = self.intercept_values[len(self.intercept_values)//2]
+        # constant_intercept = self.intercept_values[len(self.intercept_values)//2]
+        constant_intercept = -2
         ax = axes[0]
 
         for beta in self.beta_values:
@@ -172,6 +179,9 @@ class Simulation:
 
         # Plot with constant beta (choose a middle value)
         constant_beta = self.beta_values[len(self.beta_values)//2]
+        print(constant_beta)
+        # constant_beta = 0.4
+
         ax = axes[1]
 
         for intercept in self.intercept_values:
@@ -198,20 +208,20 @@ class Simulation:
 
         plt.tight_layout()
         if save_plots:
-            plt.savefig('../plots/softmax_epsilon_results.png')
+            plt.savefig('../plots/softmax_results_simulation.png')
         else:
             plt.show()
 
 def main():
     decay_rate = 0.075
     # Model parameters
-    model = 'mellowmax'  # model choices are ['softmax', 'epsilon_greedy', 'mellowmax']
+    model = 'softmax'  # model choices are ['softmax', 'epsilon_greedy', 'mellowmax']
     epsilon = 0.05  # Exploration parameter for epsilon-greedy
     omega_values = [0.25, 0.5, 0.75]  # Exploitation parameter for mellowmax operator
 
     # Only needed for softmax and epsilon_greedy models
-    beta_values = [0.25, 0.5, 0.75]
-    intercept_values = [-1, 0, 1]
+    beta_values = [0.3, 0.35]
+    intercept_values = [-2, -1]
 
     mvt_model = MVTModel(decay_type='exponential')
     MVT_rich, MVT_poor = mvt_model.run()
