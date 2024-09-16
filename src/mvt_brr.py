@@ -2,9 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class MVTModel:
-    def __init__(self, decay_type='exponential'):
+    def __init__(self, decay_type='exponential', decay_rate=None):
         # Initialize the model with a decay type, which affects how rewards decay over time.
         self.decay_type = decay_type
+        self.decay_rate = decay_rate if decay_rate else None
         # Initialize model parameters based on the decay type.
         self.TravelTs, self.reso, self.A, self.a = self.initialize_parameters()
         # Number of patch types (ecological contexts or areas).
@@ -20,7 +21,7 @@ class MVTModel:
             reso = 50  # Resolution (time length).
             a = np.array([0.075, 0.075, 0.075])  # Decay rates for each patch type.
         else:
-            a = np.array([0.3, 0.3, 0.3])
+            a = np.array([self.decay_rate, self.decay_rate, self.decay_rate])
             reso = 120
         return TravelTs, reso, A, a
 
