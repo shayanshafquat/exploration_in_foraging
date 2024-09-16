@@ -497,7 +497,60 @@ class MultipleAgent:
         belief['mean'] = updated_mean
         self.mean_history[(patch_type, env)].append(updated_mean)
 
-    # # Method 3: Gaussian Mixture Model (GMM)
+    def record_reward(self, patch_type, env, reward):
+        self.reward_history[(patch_type, env)].append(reward)
+
+    # Method 4: Fixed Decay Parameter with Noise
+    def get_reward_with_noise(self, initial_yield, true_decay_rate, time, env):
+        self.observation_counts[env] += 1
+        current_noise_std = self.noise_std * (self.noise_decay_rate ** self.observation_counts[env])
+
+        # Calculate the reward with decreasing noise
+        noise = np.random.normal(0, current_noise_std)
+        return max(0.1, initial_yield * np.exp(-(true_decay_rate + noise) * time))
+
+    # Method 6: Two-Level Bayesian Model
+    def update_belief_hierarchical(self, patch_type, env, observed_decay_rate, learning_rate=0.1):
+        belief = self.beliefs[(patch_type, env)]
+        prior_mean = belief['mean']
+        
+        updated_mean = prior_mean + learning_rate * (observed_decay_rate - prior_mean)
+        belief['mean'] = updated_mean
+
+        self.mean_history[(patch_type, env)].append(updated_mean)
+
+    # Method 7: No Update to the Mean Decay Parameter
+    def update_belief_no_mean_change(self, patch_type, env, observed_decay_rate):
+        belief = self.beliefs[(patch_type, env)]
+        belief['count'] += 1
+        
+        # Only reduce the variance, do not change the mean
+        prior_var = belief['std'] ** 2
+        new_var = prior_var * belief['count'] / (belief['count'] + 1)
+        belief['std'] = np.sqrt(new_var)
+
+        self.std_history[(patch_type, env)].append(np.sqrt(new_var))
+
+    # Existing Methods (Decide Leave, etc.)
+    def decide_leave(self, reward, average_reward):
+        return reward < average_reward
+    
+    # Method 5: Random Walk on Decay Parameter
+    # def update_belief_random_walk(self, patch_type, env, step_size=0.001):
+    #     belief = self.beliefs[(patch_type, env)]
+    #     prior_mean = belief['mean']
+    #     random_walk = np.random.normal(0, step_size)
+        
+    #     # Update with a small random walk
+    #     new_mean = prior_mean + random_walk
+        
+    #     # Keep the mean within reasonable bounds
+    #     new_mean = max(0, new_mean)
+
+    #     self.beliefs[(patch_type, env)]['mean'] = new_mean
+    #     self.mean_history[(patch_type, env)].append(new_mean)
+
+        # # Method 3: Gaussian Mixture Model (GMM)
     # def update_belief_gmm(self, patch_type, env):
     #     belief = self.beliefs[(patch_type, env)]
     #     reward_data = self.reward_history[(patch_type, env)]
@@ -527,60 +580,6 @@ class MultipleAgent:
 
     #         self.mean_history[(patch_type, env)].append(belief['mean'])
     #         self.std_history[(patch_type, env)].append(belief['std'])
-
-    def record_reward(self, patch_type, env, reward):
-        self.reward_history[(patch_type, env)].append(reward)
-
-    # Method 4: Fixed Decay Parameter with Noise
-    def get_reward_with_noise(self, initial_yield, true_decay_rate, time, env):
-        self.observation_counts[env] += 1
-        current_noise_std = self.noise_std * (self.noise_decay_rate ** self.observation_counts[env])
-
-        # Calculate the reward with decreasing noise
-        noise = np.random.normal(0, current_noise_std)
-        return max(0.1, initial_yield * np.exp(-(true_decay_rate + noise) * time))
-
-    # # Method 5: Random Walk on Decay Parameter
-    # def update_belief_random_walk(self, patch_type, env, step_size=0.001):
-    #     belief = self.beliefs[(patch_type, env)]
-    #     prior_mean = belief['mean']
-    #     random_walk = np.random.normal(0, step_size)
-        
-    #     # Update with a small random walk
-    #     new_mean = prior_mean + random_walk
-        
-    #     # Keep the mean within reasonable bounds
-    #     new_mean = max(0, new_mean)
-
-    #     self.beliefs[(patch_type, env)]['mean'] = new_mean
-    #     self.mean_history[(patch_type, env)].append(new_mean)
-
-    # Method 6: Two-Level Bayesian Model
-    def update_belief_hierarchical(self, patch_type, env, observed_decay_rate, learning_rate=0.1):
-        belief = self.beliefs[(patch_type, env)]
-        prior_mean = belief['mean']
-        
-        # Update environment-level belief while subject-level remains stable
-        updated_mean = prior_mean + learning_rate * (observed_decay_rate - prior_mean)
-        belief['mean'] = updated_mean
-
-        self.mean_history[(patch_type, env)].append(updated_mean)
-
-    # Method 7: No Update to the Mean Decay Parameter
-    def update_belief_no_mean_change(self, patch_type, env, observed_decay_rate):
-        belief = self.beliefs[(patch_type, env)]
-        belief['count'] += 1
-        
-        # Only reduce the variance, do not change the mean
-        prior_var = belief['std'] ** 2
-        new_var = prior_var * belief['count'] / (belief['count'] + 1)
-        belief['std'] = np.sqrt(new_var)
-
-        self.std_history[(patch_type, env)].append(np.sqrt(new_var))
-
-    # Existing Methods (Decide Leave, etc.)
-    def decide_leave(self, reward, average_reward):
-        return reward < average_reward
     
 class AgentWithMemory:
     def __init__(self, decay_rate_means, decay_rate_stds, method='bayesian', observation_var=0.00001, noise_std=0.01, learning_rate=0.1, ema_alpha=0.1, n_components=2, memory_size=10):
