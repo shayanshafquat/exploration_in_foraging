@@ -32,67 +32,6 @@ def group_data(df_trials):
         count=('leaveT', 'count')
     ).reset_index()
 
-# def calculate_leave_statistics(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
-#     agent_kwargs = {
-#         'policy_type': policy_type,
-#         'beta': parameter if policy_type == 'softmax' else None,
-#         'intercept': intercept,
-#         'omega': parameter if policy_type == 'mellowmax' else None,
-#         'use_intercept': use_intercept
-#     }
-#     if policy_type == 'mellowmax':
-#         agent_kwargs['mellowmax_type'] = mellowmax_type
-
-#     agent = Agent(**agent_kwargs)
-
-#     patch.start_harvesting()
-#     expected_leave_time = 0.0
-#     variance_leave_time = 0.0
-#     cumulative_prob = 1.0
-
-#     for n in range(1, max_timesteps + 1):
-#         reward = patch.get_reward()
-#         prob_leave_now = agent.get_leave_probability(reward)
-#         p_leave_n = prob_leave_now * cumulative_prob
-        
-#         # Expected leave time E(leave)
-#         expected_leave_time += n * p_leave_n
-        
-#         # Variance of leave time VAR(leave)
-#         variance_leave_time += ((n - expected_leave_time) ** 2) * p_leave_n
-        
-#         # Update cumulative probability
-#         cumulative_prob *= (1 - prob_leave_now)
-    
-#     std_leave_time = np.sqrt(variance_leave_time)
-#     return expected_leave_time, std_leave_time
-
-# def simulate_agent_in_patch(policy_type, parameter, intercept, patch, mellowmax_type=None, max_timesteps=200, use_intercept=True):
-#     agent_kwargs = {
-#         'policy_type': policy_type,
-#         'beta': parameter if policy_type == 'softmax' else None,
-#         'intercept': intercept,
-#         'omega': parameter if policy_type == 'mellowmax' else None,
-#         'use_intercept': use_intercept
-#     }
-#     if policy_type == 'mellowmax':
-#         agent_kwargs['mellowmax_type'] = mellowmax_type
-
-#     agent = Agent(**agent_kwargs)
-
-#     patch.start_harvesting()
-#     cumulative_prob = 1.0
-#     expected_leave_time = 0.0
-
-#     for n in range(1, max_timesteps + 1):
-#         reward = patch.get_reward()
-#         prob_leave_now = agent.get_leave_probability(reward)
-#         prob_leave_n = prob_leave_now * cumulative_prob
-#         expected_leave_time += n * prob_leave_n
-#         cumulative_prob *= (1 - prob_leave_now)
-
-#     return expected_leave_time
-
 def objective(params, df, patches, policy_type, mellowmax_type=None, fix_intercept=None, fix_parameter=None):
     if fix_parameter is not None:
         parameter = fix_parameter
@@ -117,31 +56,6 @@ def objective(params, df, patches, policy_type, mellowmax_type=None, fix_interce
         
     rmse = np.sqrt(total_error / total_count)
     return rmse
-
-# def objective(params, df, patches, policy_type, mellowmax_type=None, fix_intercept=None, fix_parameter=None):
-#     if fix_parameter is not None:
-#         parameter = fix_parameter
-#         intercept = params[0]
-#     elif fix_intercept is not None:
-#         parameter = params[0]
-#         intercept = fix_intercept
-#     else:
-#         parameter, intercept = params
-
-#     total_error = 0
-#     total_count = df['count'].sum()
-#     patch_mapping = {1: 'low', 2: 'med', 3: 'high'}
-    
-#     for _, row in df.iterrows():
-#         patch_type, actual_mean, count = row['patch'], row['mean_leaveT'], row['count']
-#         patch_name = patch_mapping[patch_type]
-#         patch = patches[patch_name]
-#         predicted_mean = simulate_agent_in_patch(policy_type, parameter, intercept, patch, mellowmax_type)
-#         error = count * (predicted_mean - actual_mean) ** 2
-#         total_error += error
-        
-#     rmse = np.sqrt(total_error / total_count)
-#     return rmse
 
 def fit_parameters_for_subject(df_sub, patches, policy_type, mellowmax_type=None):
     initial_guess = [0.3, -3] if policy_type == 'softmax' else [0.3, 0]
