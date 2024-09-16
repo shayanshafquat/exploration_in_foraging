@@ -9,12 +9,12 @@ matplotlib.rc('xtick', labelsize=15)
 matplotlib.rc('ytick', labelsize=15)
 
 class Simulation:
-    def __init__(self, decay_rate, model, beta_values=None, intercept_values=None, epsilon=None, omega_values=None):
+    def __init__(self, decay_rate, model, beta_values=None, intercept_values=None, epsilon_values=None, omega_values=None):
         self.decay_rate = decay_rate
         self.beta_values = beta_values if beta_values is not None else []
         self.intercept_values = intercept_values if intercept_values is not None else []
         self.model = model
-        self.epsilon = epsilon if model == 'epsilon_greedy' else None
+        self.epsilon_values = epsilon_values if model == 'epsilon-greedy' else None
         self.omega_values = omega_values if model == 'mellowmax' else None
         self.patch_types = self.initialize_env()
 
@@ -33,8 +33,8 @@ class Simulation:
             patch.start_harvesting()
             for t in range(1, n_max+1):
                 reward = patch.get_reward()
-                if self.model == 'epsilon_greedy':
-                    action = agent.choose_action_epsilon(reward, self.epsilon)
+                if self.model == 'epsilon-greedy':
+                    action = agent.choose_action_epsilon(reward)
                 elif self.model == 'mellowmax':
                     action = agent.choose_action_mellowmax(reward)
                 else:
@@ -69,6 +69,20 @@ class Simulation:
                         'intercept': intercept,
                         'patch_stats': patch_stats
                     })
+        elif self.model == 'epsilon-greedy':
+            for epsilon in self.epsilon_values:  # Example range from 0.01 to 1.0
+                agent = Agent(policy_type=self.model, epsilon=epsilon)
+
+                patch_stats = []
+                for patch_id in self.patch_types:
+                    leave_times = self.simulate(patch_id, agent)
+                    stats = self.compute_stats(leave_times)
+                    patch_stats.append(stats)
+
+                results.append({
+                    'epsilon': epsilon,
+                    'patch_stats': patch_stats
+                })
         else:
             for beta in self.beta_values:
                 for intercept in self.intercept_values:
@@ -90,8 +104,53 @@ class Simulation:
     def plot_results(self, results, MVT_rich, MVT_poor, save_plots=False):
         if self.model == 'mellowmax':
             self.plot_mellowmax_results(results, MVT_rich, MVT_poor, save_plots)
+        elif self.model == 'epsilon-greedy':
+            self.plot_epsilon_greedy_results(results, MVT_rich, MVT_poor, save_plots)
         else:
             self.plot_softmax_results(results, MVT_rich, MVT_poor, save_plots)
+
+    def plot_epsilon_greedy_results(self, results, MVT_rich, MVT_poor, save_plots=False):
+        fig, ax = plt.subplots(figsize=(4, 4))
+
+        epsilon_colors = plt.cm.viridis(np.linspace(0, 1, len(results)))
+
+        for i, result in enumerate(results):
+            epsilon = result["epsilon"]
+            y_value = 1 / epsilon  # Calculating the y-value as 1/epsilon
+
+            patch_types = ['Low', 'Mid', 'High']
+            y_values = [y_value, y_value, y_value]
+            
+            # Plot horizontal line at y = 1/epsilon
+            color = 'green' if i == 0 else 'blue'
+            ax.plot(patch_types, y_values, linestyle='-', marker='o', color=color, label=f'Epsilon: {epsilon:.2f}')
+
+        # for i, result in enumerate(results):
+        #     patch_stats = result['patch_stats']
+
+        #     patch_types = ['Low', 'Mid', 'High']
+        #     means = [stat[0] for stat in patch_stats]
+        #     errors = [stat[1] for stat in patch_stats]
+
+        #     color = epsilon_colors[i]
+        #     ax.errorbar(patch_types, means, yerr=errors, marker='o', linestyle='-', color=color, 
+        #                 label=f'Epsilon: {result["epsilon"]:.2f}', capsize=5)
+
+        ax.plot(patch_types, MVT_rich, marker='o', linestyle='--', color='blue', alpha=0.8)
+        ax.plot(patch_types, MVT_poor, marker='o', linestyle='--', color='green', alpha=0.8)
+
+        ax.set_xlabel('Patch Types', fontsize=15)
+        ax.set_ylabel('Expected Leave Time', fontsize=15)
+        ax.tick_params(axis='both', which='major', labelsize=15)
+        ax.legend(fontsize=14)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig('../plots/epsilon_greedy_results.png')
+        else:
+            plt.show()
 
     def plot_mellowmax_results(self, results, MVT_rich, MVT_poor, save_plots=False):
         fig, axes = plt.subplots(1, 2, figsize=(8, 4))
@@ -222,17 +281,18 @@ class Simulation:
 
 def main():
     decay_rate = 0.075
-    model = 'mellowmax'
+    model = 'epsilon-greedy'
     beta_values = [0.185, 0.22]  # Example beta values for demonstration
     # intercept_values = [-3.07, -2.38]  # Example intercept values for demonstration
     intercept_values = [-1, 0]
     omega_values = [0.2, 0.4]
+    epsilon_values = [0.08, 0.1]
 
     # Assume MVTModel has the required implementation
     mvt_model = MVTModel(decay_type='exponential')
     MVT_rich, MVT_poor = mvt_model.run()
 
-    sim = Simulation(decay_rate, model, beta_values=beta_values, intercept_values=intercept_values, omega_values=omega_values)
+    sim = Simulation(decay_rate, model, beta_values=beta_values, intercept_values=intercept_values, epsilon_values=epsilon_values, omega_values=omega_values)
     results = sim.prepare_results()
     sim.plot_results(results, MVT_rich, MVT_poor, save_plots=True)
 
