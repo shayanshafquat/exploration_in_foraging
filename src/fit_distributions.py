@@ -132,27 +132,44 @@ class DistributionFitter:
 
 def plot_scores(total_scores, score_type, patch_names):
     """
-    Plot total scores (AIC or BIC) vs patch types for each distribution.
+    Plot total scores (AIC or BIC) as histograms for each patch type.
     
     Parameters:
     total_scores (DataFrame): DataFrame containing the scores
     score_type (str): Either 'aic' or 'bic'
     patch_names (dict): Dictionary mapping patch numbers to names
     """
+    plt.figure(figsize=(12, 6))
     
-    plt.figure(figsize=(8, 6))
+    # Define the ordered patch types
+    ordered_patch_types = ['Low', 'Medium', 'High']
+    distributions = total_scores['distribution'].unique()
+    n_distributions = len(distributions)
     
-    # Create plot
-    for dist in total_scores['distribution'].unique():
+    # Set up the bar positions
+    bar_width = 0.8 / n_distributions
+    index = np.arange(len(ordered_patch_types))
+    
+    # Create bars for each distribution
+    for i, dist in enumerate(distributions):
         dist_data = total_scores[total_scores['distribution'] == dist]
-        plt.plot(dist_data['patch_type'], dist_data[score_type], 
-                marker='o', label=dist, linewidth=2)
+        
+        # Ensure data is in the same order as ordered_patch_types
+        scores = [dist_data[dist_data['patch_type'] == patch][score_type].values[0] 
+                 for patch in ordered_patch_types]
+        
+        # Calculate bar positions
+        bar_positions = index + (i - n_distributions/2 + 0.5) * bar_width
+        
+        plt.bar(bar_positions, scores, bar_width, 
+               label=dist, alpha=0.8)
     
+    # Customize the plot
     plt.xlabel('Patch Type', fontsize=12)
     plt.ylabel(f'Total {score_type.upper()}', fontsize=12)
     plt.title(f'Total {score_type.upper()} by Patch Type and Distribution', fontsize=14)
+    plt.xticks(index, ordered_patch_types)
     plt.legend(title='Distribution', bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True, alpha=0.3)
     
     # Remove top and right spines
     sns.despine()
@@ -167,6 +184,85 @@ def plot_scores(total_scores, score_type, patch_names):
     plt.savefig(f'figures/distribution_fits/total_{score_type.lower()}_comparison.png', 
                 bbox_inches='tight', dpi=300)
     plt.close()
+
+def plot_subject_distributions(df, subject_id, distribution_type="normal"):
+    """
+    Create a grid plot of distribution fits for a given subject.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        The dataframe containing the trial data
+    subject_id : int
+        The subject ID to plot
+    distribution_type : str
+        The type of distribution to plot ("normal" or "lognormal")
+    """
+    # Set up the grid plot
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))  # 2 rows (environments) x 3 columns (patch types)
+    patch_types = [1, 2, 3]  # Low, Medium, High
+    environments = [1, 2]    # Rich, Poor
+
+    patch_names = {1: 'Low', 2: 'Medium', 3: 'High'}
+    env_names = {1: 'Rich', 2: 'Poor'}
+
+    def plot_distribution_fits(data, fit_results, name, ax):
+        """Plot histogram of data with fitted distributions on given axis"""
+        if name == 'lognormal':
+            # For lognormal, use log-spaced bins and x-axis
+            bins = np.logspace(np.log10(min(data)), np.log10(max(data)), 20)
+            ax.hist(data, bins=bins, density=True, alpha=0.5, label='Data')
+            ax.set_xscale('log')
+            x = np.logspace(np.log10(min(data)), np.log10(max(data)), 100)
+        else:
+            # For other distributions, use linear spacing
+            ax.hist(data, bins=20, density=True, alpha=0.5, label='Data')
+            x = np.linspace(min(data), max(data), 100)
+        
+        # Plot fitted distributions
+        for dist_name, results in fit_results.items():
+            try:
+                if dist_name == 'normal' and name == 'normal':
+                    ax.plot(x, stats.norm.pdf(x, *results['params']), 
+                            label=f'{dist_name}')
+                elif dist_name == 'lognormal' and name == 'lognormal':
+                    ax.plot(x, stats.lognorm.pdf(x, *results['params']),
+                            label=f'{dist_name}')
+            except:
+                continue
+                
+        ax.set_xlabel('Leaving Time')
+        ax.set_ylabel('Density')
+        ax.legend()
+
+    # Create plots for the specified distribution
+    for i, env in enumerate(environments):
+        for j, patch in enumerate(patch_types):
+            leave_times = df[
+                (df['sub'] == subject_id) & 
+                (df['patch'] == patch) & 
+                (df['env'] == env)
+            ]['leaveT'].values
+            
+            if len(leave_times) > 0:
+                # Fit distributions
+                fitter = DistributionFitter(leave_times)
+                fit_results = fitter.fit_all()
+                
+                # Plot on the corresponding subplot
+                plot_distribution_fits(leave_times, fit_results, distribution_type, axes[i, j])
+                axes[i, j].set_title(f'{env_names[env]} Environment - {patch_names[patch]} Patch')
+
+    plt.tight_layout()
+    
+    # Create directory if it doesn't exist
+    os.makedirs('../figures/distribution_fits', exist_ok=True)
+    
+    # Save plot
+    plt.savefig(f'../figures/distribution_fits/subject{subject_id}_{distribution_type}_fits.png', 
+                bbox_inches='tight', dpi=300)
+    plt.close()
+
 
 def main():
     # Load the data
@@ -273,6 +369,15 @@ def main():
     # Create plots for AIC and BIC
     plot_scores(total_scores, 'aic', patch_names)
     plot_scores(total_scores, 'bic', patch_names)
+
+    subjects_to_plot = [11]  # Add more subject IDs as needed
+    distribution_types = ['normal', 'lognormal']
+    
+    print("\nGenerating distribution plots for selected subjects...")
+    for subject in subjects_to_plot:
+        for dist_type in distribution_types:
+            plot_subject_distributions(df, subject, dist_type)
+            print(f"Generated {dist_type} distribution plots for subject {subject}")
 
 if __name__ == "__main__":
     main() 
