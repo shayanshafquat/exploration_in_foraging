@@ -63,7 +63,7 @@ def assess_sample_size(data: np.ndarray, alpha: float = 0.05) -> Dict:
 def fit_population_distributions(df: pd.DataFrame) -> pd.DataFrame:
     """
     Fit distributions to population-level data for each patch x environment combination.
-    First normalizes within subjects, then combines normalized data.
+    First normalizes within subjects using scipy.stats.zscore, then combines normalized data.
     
     Args:
         df: DataFrame containing trial data
@@ -76,12 +76,15 @@ def fit_population_distributions(df: pd.DataFrame) -> pd.DataFrame:
         ('normal', stats.norm),
         ('lognormal', stats.lognorm),
         ('gamma', stats.gamma),
-        ('exponential', stats.expon),
-        ('weibull', stats.weibull_min)
+        # ('exponential', stats.expon),
+        # ('weibull', stats.weibull_min)
     ]
     
     # Create output directory
     os.makedirs('figures/population_fits', exist_ok=True)
+    
+    # Create DataFrame to store all normalized times for violin plot
+    normalized_data = []
     
     # Analyze each patch x environment combination
     for patch in sorted(df['patch'].unique()):
@@ -90,12 +93,10 @@ def fit_population_distributions(df: pd.DataFrame) -> pd.DataFrame:
             normalized_times_all = []
             
             for subject in df['sub'].unique():
-                # Get subject's overall stats for normalization
+                # Get subject's overall leaving times
                 subject_times = df[df['sub'] == subject]['leaveT'].values
                 if len(subject_times) < 5:  # Skip subjects with too few trials
                     continue
-                subject_mean = np.mean(subject_times)
-                subject_std = np.std(subject_times)
                 
                 # Get this subject's leaving times for this patch x env combination
                 leave_times = df[
@@ -105,9 +106,16 @@ def fit_population_distributions(df: pd.DataFrame) -> pd.DataFrame:
                 ]['leaveT'].values
                 
                 if len(leave_times) > 0:
-                    # Normalize within subject
-                    subject_normalized = (leave_times - subject_mean) / subject_std
+                    # Normalize within subject using scipy's zscore
+                    subject_normalized = stats.zscore(leave_times)
                     normalized_times_all.extend(subject_normalized)
+                    
+                    # Store normalized data for violin plot
+                    normalized_data.extend([
+                        {'patch': f'Patch {patch}',
+                         'env': f'Env {env}',
+                         'normalized_time': t} for t in subject_normalized
+                    ])
             
             normalized_times_all = np.array(normalized_times_all)
             
@@ -190,6 +198,24 @@ def fit_population_distributions(df: pd.DataFrame) -> pd.DataFrame:
                     'ks_stat': res['ks_stat'],
                     'ks_p': res['ks_p']
                 })
+    
+    # Create violin plot of normalized distributions
+    plt.figure(figsize=(12, 6))
+    df_normalized = pd.DataFrame(normalized_data)
+    
+    sns.violinplot(x='patch', y='normalized_time', data=df_normalized, 
+                  hue='env', inner='box', palette='Set3',
+                  inner_kws=dict(box_width=10, whis_width=1.5, color=".45"))
+    
+    plt.title('Distribution of Z-scored Leaving Times by Patch and Environment')
+    plt.xlabel('Patch Type')
+    plt.ylabel('Z-scored Leave Time')
+    plt.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('figures/population_fits/normalized_distributions.png', 
+                bbox_inches='tight', dpi=300)
+    plt.close()
     
     return pd.DataFrame(results)
 
